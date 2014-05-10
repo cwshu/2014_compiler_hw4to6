@@ -4,7 +4,7 @@
 #define ID_MAX_LEN 256
 
 /* struct type */
-typedef struct SymbolTableTree SymbolTableTree;
+typedef struct SymbolTableTree SymbolTableTree, STT;
 typedef struct SymbolTableNode SymbolTableNode;
 typedef struct SymbolTableEntry SymbolTableEntry;
     typedef enum SymbolTableEntryKind SymbolTableEntryKind;
@@ -17,7 +17,7 @@ typedef struct ParameterNode ParameterNode;
 #define BUILD 1
 #define USE   2
 struct SymbolTableTree{
-    /* complete symbol tables */
+    /* Complete Symbol Tables, structured in Tree. */
     SymbolTableNode* root;
     
     int currentLevel; /* depth of current inner symbolTable(scope), 0 means global */
@@ -27,7 +27,7 @@ struct SymbolTableTree{
 /* methods */
 SymbolTableTree* createSymbolTableTree();
 void openScope(SymbolTableTree* pThis, int phase);
-void closeScope(SymbolTableTree* pThis, int phase);
+void closeScope(SymbolTableTree* pThis);
 void addSymbol(SymbolTableTree* pThis, char* name);
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
 
@@ -56,9 +56,9 @@ int hashFunction(char* str);
 /* SymbolTableEntry and methods prototype */
 struct SymbolTableEntry{
      char* name;
-     SymbolTableEntryKind kind; /* UNFINISH */
+     SymbolTableEntryKind kind;
      /* var, typedef, array, function */
-     TypeDescriptor* type;
+     TypeDescriptor* type; /* return_type in function */
      /* processing scalar + array type */
      ParameterNode* functionParameterList;
      /* Non-NULL if kind == FUNCTION */
@@ -89,6 +89,6 @@ struct ParameterNode{
     TypeDescriptor type;
     ParameterNode* next;
 };
-ParameterNode createParameterNode(char* name, TypeDescriptor type);
+ParameterNode* createParameterNode(char* name, TypeDescriptor type);
 
 #endif
