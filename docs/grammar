@@ -1,0 +1,123 @@
+program		: global_decl_list
+		|
+		
+global_decl_list: global_decl_list global_decl
+                | global_decl
+                
+global_decl	: decl_list function_decl
+            | function_decl
+            
+function_decl	: type ID MK_LPAREN param_list MK_RPAREN MK_LBRACE block MK_RBRACE
+                | VOID ID MK_LPAREN param_list MK_RPAREN MK_LBRACE block MK_RBRACE
+                | ID ID MK_LPAREN param_list MK_RPAREN MK_LBRACE block MK_RBRACE
+                | type ID MK_LPAREN  MK_RPAREN MK_LBRACE block MK_RBRACE
+                | VOID ID MK_LPAREN  MK_RPAREN MK_LBRACE block MK_RBRACE
+                | ID ID MK_LPAREN  MK_RPAREN MK_LBRACE block MK_RBRACE
+                
+param_list	: param_list MK_COMMA  param
+            | param
+            
+param		: type ID
+            | ID ID
+            | type ID dim_fn
+            | ID ID dim_fn
+            
+dim_fn		: MK_LB expr_null MK_RB
+            | dim_fn MK_LB expr MK_RB
+		
+expr_null	: expr
+            |
+            
+block           : decl_list stmt_list
+                | stmt_list
+                | decl_list
+                |
+                
+decl_list	: decl_list decl
+            | decl
+            
+decl		: type_decl
+            | var_decl
+            
+type_decl 	: TYPEDEF type id_list MK_SEMICOLON
+            | TYPEDEF VOID id_list MK_SEMICOLON
+            
+var_decl	: type init_id_list MK_SEMICOLON
+            | ID id_list MK_SEMICOLON
+            
+type		: INT
+            | FLOAT
+            
+id_list		: ID
+            | id_list MK_COMMA ID
+            | id_list MK_COMMA ID dim_decl
+            | ID dim_decl
+		
+dim_decl	: MK_LB cexpr MK_RB
+            | dim_decl MK_LB cexpr MK_RB
+            
+cexpr		: cexpr OP_PLUS mcexpr
+            | cexpr OP_MINUS mcexpr
+            | mcexpr
+            
+mcexpr		: mcexpr OP_TIMES cfactor
+            | mcexpr OP_DIVIDE cfactor
+            | cfactor
+            
+cfactor:	CONST
+            |MK_LPAREN cexpr MK_RPAREN
+            
+init_id_list	: init_id
+                | init_id_list MK_COMMA init_id
+                
+init_id		: ID
+            | ID dim_decl
+            | ID OP_ASSIGN relop_expr
+            
+stmt_list	: stmt_list stmt
+            | stmt
+            
+stmt		: MK_LBRACE block MK_RBRACE
+            | WHILE MK_LPAREN test MK_RPAREN stmt
+            | FOR MK_LPAREN assign_expr_list MK_SEMICOLON relop_expr_list MK_SEMICOLON assign_expr_list MK_RPAREN stmt
+            | var_ref OP_ASSIGN relop_expr MK_SEMICOLON
+            | IF MK_LPAREN test MK_RPAREN stmt
+            | IF MK_LPAREN test MK_RPAREN stmt ELSE stmt
+            | ID MK_LPAREN relop_expr_list MK_RPAREN MK_SEMICOLON
+            | MK_SEMICOLON
+            | RETURN MK_SEMICOLON
+            | RETURN relop_expr MK_SEMICOLON
+            
+assign_expr_list : nonempty_assign_expr_list
+                 |
+                 
+nonempty_assign_expr_list        : nonempty_assign_expr_list MK_COMMA assign_expr
+                                 | assign_expr
+                                 
+test		: assign_expr
+            
+assign_expr     : ID OP_ASSIGN relop_expr
+                | relop_expr
+		
+relop_expr	: relop_term
+            | relop_expr OP_OR relop_term
+            
+relop_term	: relop_factor
+            | relop_term OP_AND relop_factor
+            
+relop_factor	: expr
+                | expr rel_op expr
+                
+rel_op		: OP_EQ
+            | OP_GE
+            | OP_LE
+            | OP_NE
+            | OP_GT
+            | OP_LT
+            
+relop_expr_list	: nonempty_relop_expr_list
+                |
+                
+nonempty_relop_expr_list	: nonempty_relop_expr_list MK_COMMA relop_expr
+                            | relop_expr
+                            

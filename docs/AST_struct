@@ -1,0 +1,102 @@
+AST_NODE
+    - AST_TYPE
+        | PROGRAM_NODE,
+        | DECLARATION_NODE,
+        | IDENTIFIER_NODE,
+        | PARAM_LIST_NODE,
+        | NUL_NODE,
+        | BLOCK_NODE,
+        | VARIABLE_DECL_LIST_NODE,
+        | STMT_LIST_NODE,
+        | STMT_NODE,
+        | EXPR_NODE,
+        | CONST_VALUE_NODE, //ex:1, 2, "constant string"
+        | NONEMPTY_ASSIGN_EXPR_LIST_NODE,
+        | NONEMPTY_RELOP_EXPR_LIST_NODE
+    - DATA_TYPE
+        | INT_TYPE,
+        | FLOAT_TYPE,
+        | VOID_TYPE,
+        | INT_PTR_TYPE,//for parameter passing
+        | FLOAT_PTR_TYPE,//for parameter passing
+        | CONST_STRING_TYPE,//for "const string"
+        | NONE_TYPE,//for nodes like PROGRAM_NODE which has no type
+        | ERROR_TYPE
+    - union
+        - DECLSemanticValue declSemanticValue;
+        - STMTSemanticValue stmtSemanticValue;
+        - EXPRSemanticValue exprSemanticValue;
+        - IdentifierSemanticValue identifierSemanticValue;
+	    - CON_Type *const1;
+
+
+IdentifierSemanticValue identifierSemanticValue;
+    - IDENTIFIER_KIND
+        | NORMAL_ID, //function Name, uninitialized scalar variable
+        | ARRAY_ID, //ID_NODE->child = dim
+        | WITH_INIT_ID, //ID_NODE->child = initial value
+    - char *identifierName;
+    - struct SymbolTableEntry *symbolTableEntry;
+
+STMTSemanticValue stmtSemanticValue;
+    - STMT_KIND
+        | WHILE_STMT,
+        | FOR_STMT,
+        | ASSIGN_STMT, //TODO:for simpler implementation, assign_expr also uses this
+        | IF_STMT,
+        | FUNCTION_CALL_STMT,
+        | RETURN_STMT,
+
+DECLSemanticValue declSemanticValue;
+    - DECL_KIND
+        | VARIABLE_DECL,
+        | TYPE_DECL,
+        | FUNCTION_DECL,
+        | FUNCTION_PARAMETER_DECL
+
+EXPRSemanticValue exprSemanticValue;
+    - EXPR_KIND
+        | BINARY_OPERATION,
+        | UNARY_OPERATION
+    - union constEvalValue
+        - iValue
+        - fValue
+    - union op
+        - binaryOp
+        - unaryOp
+
+CON_Type *const1;
+    - C_type
+        | INTEGERC
+        | FLOATC
+        | STRINGC
+	- union const_u
+		- int     intval;
+		- double  fval;
+		- char    *sc;
+		
+
+
+
+typedef enum BINARY_OPERATOR
+{
+    BINARY_OP_ADD,
+    BINARY_OP_SUB,
+    BINARY_OP_MUL,
+    BINARY_OP_DIV,
+    BINARY_OP_EQ,
+    BINARY_OP_GE,
+    BINARY_OP_LE,
+    BINARY_OP_NE,
+    BINARY_OP_GT,
+    BINARY_OP_LT,
+    BINARY_OP_AND,
+    BINARY_OP_OR
+} BINARY_OPERATOR;
+
+typedef enum UNARY_OPERATOR
+{
+    UNARY_OP_POSITIVE,
+    UNARY_OP_NEGATIVE,
+    UNARY_OP_LOGICAL_NEGATION
+} UNARY_OPERATOR;

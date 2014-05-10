@@ -1,0 +1,69 @@
+- program
+    - global_decl_list
+        - global_decl (many)
+            - decl_list 
+            - function_decl
+                - param_list
+                    - param
+                        - dim
+                - block
+                    - decl_list
+                    - stmt_list
+
+- decl_list
+    - decl (many)
+        | type_decl
+            - typedef
+        | var_decl
+            - 變數宣告
+
+- stmt_list
+    - stmt (many)
+        - { block }
+
+        | while_stmt 
+        | for_stmt
+        | if_stmt
+        | if_then_else_stmt
+
+        | function_call
+
+        | assignment (a = b + c)
+
+        | ;
+        | return ;
+        | return expression
+
+
+dimension
+---------
+dim_decl (array 宣告)
+dim_list (array 使用)
+dim_fn   (array in function parameter)
+
+operator 優先度
+---------------
+- nonempty_relop_expr_list
+- relop_expr
+- relop_term
+- relop_factor
+- expr
+- term
+- factor
+
+(start from 低優先度)
+- MK_COMMA
+- OP_OR
+- OP_AND
+- rel_op
+    - OP_EQ ... 6 種
+- OP_PLUS, OP_MINUS
+- OP_TIMES, OP_DIVIDE
+- OP_NOT
+
+- cexpr
+    - OP_PLUS, OP_MINUS
+- mcexpr
+    - OP_TIMES, OP_DIVIDE
+- cfactor
+    - (cexpr)

@@ -1,0 +1,75 @@
+metadata
+--------
+SymbolTable
+    - SymbolTableEntry
+        - SymbolAttribute
+            | TypeDescriptor
+                | DATA_TYPE
+                | ArrayProperties
+                    - int sizeInEachDimension[MAX_ARRAY_DIMENSION]
+            | FunctionSignature
+                - Parameter (parameter list, use pointer)
+                    - TypeDescriptor
+
+
+
+data
+----
+struct SymbolTable:
+    SymbolTableEntry* hashTable[HASH_TABLE_SIZE]
+    SymbolTableEntry** scopeDisplay
+    int currentLevel
+    int scopeDisplayElementCount
+
+struct SymbolTableEntry:
+     SymbolTableEntry* nextInHashChain
+     SymbolTableEntry* prevInHashChain
+     SymbolTableEntry* nextInSameLevel
+     SymbolTableEntry* sameNameInOuterLevel
+
+    char* name
+    int nestingLevel
+    SymbolAttribute* attribute
+
+struct SymbolAttribute:
+    SymbolAttributeKind attributeKind
+        | VARIABLE_ATTRIBUTE
+        | TYPE_ATTRIBUTE
+        | FUNCTION_SIGNATURE
+    union attr
+        TypeDescriptor* typeDescriptor
+        FunctionSignature* functionSignature
+
+struct TypeDescriptor:
+    TypeDescriptorKind kind;
+        | SCALAR_TYPE_DESCRIPTOR
+        | ARRAY_TYPE_DESCRIPTOR
+    union properties:
+        DATA_TYPE dataType; //kind: SCALAR_TYPE_DESCRIPTOR
+        ArrayProperties arrayProperties; //kind: ARRAY_TYPE_DESCRIPTOR
+
+typedef struct ArrayProperties:
+    int dimension;
+    int sizeInEachDimension[MAX_ARRAY_DIMENSION];
+    //point to a TypeDescriptor in the symbol table;
+    DATA_TYPE elementType;
+
+typedef struct FunctionSignature:
+    int parametersCount;
+    Parameter* parameterList;
+    DATA_TYPE returnType;
+
+typedef struct Parameter:
+    //point to a TypeDescriptor in the symbol table;
+    struct Parameter* next;
+    TypeDescriptor* type;
+    char* parameterName;
+
+enum SymbolAttributeKind:
+    VARIABLE_ATTRIBUTE
+    TYPE_ATTRIBUTE
+    FUNCTION_SIGNATURE
+
+enum TypeDescriptorKind:
+    SCALAR_TYPE_DESCRIPTOR
+    ARRAY_TYPE_DESCRIPTOR

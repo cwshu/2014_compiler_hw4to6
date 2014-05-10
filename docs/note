@@ -1,0 +1,36 @@
+Implicit Type Conversion
+------------------------
+a. assignment statement:
+    - rvalue conversion to lvalue
+b. operation: 
+    - int OP float, convert int to float
+c. function argument:
+    - if the argument type in function call is different from in function declaration, convert it.
+
+Type checking
+-------------
+1. variable declaration
+   a. no declaration.
+   b. declared more than once at same scope.
+2. function and function call
+   a. too few/many arguments in function call.
+   b. function return value type error.
+3. array reference
+   a. too few/many array dimension (except in function parameter)
+   b. array subscript isn't a integer.
+   c. function parameter: pass scalar to array type, or otherwise.
+
+Symbol Table
+------------
+- scope
+    - openScope
+    - closeScope
+- entry
+    - addSymbol
+    - lookupSymbol
+
+- struct
+    - name
+    - kind (var, typedef, array, function)
+    - type/return type/typedef_type
+    - array dimension/function parameter

@@ -1,0 +1,13 @@
+- SymbolTableTree
+    - SymbolTableNode
+        - SymbolTableEntry
+            - char* name
+            - enum kind (var, typedef, array, function)
+            - TypeDescriptor (scalar + array type)
+                - DATA_TYPE primitiveType
+                - int dimension (dimension 0 means scalar type)
+                - int* sizeInEachDimension[MAX_ARRAY_DIMENSION]
+            - ParameterNode* functionParameterList 
+                - char* name
+                - TypeDescriptor
+                - ParameterNode* next
