@@ -1,32 +1,18 @@
-typedef enum ErrorMsgKind ErrorMsgKind;
-void printErrorMsg(AST_NODE* node, ErrorMsgKind errorMsgKind);
-
-enum ErrorMsgKind{
-    SYMBOL_UNDECLARED,
-    SYMBOL_REDECLARE,
-    // SYMBOL_IS_NOT_TYPE,
-
-    TOO_FEW_ARGUMENTS,
-    TOO_MANY_ARGUMENTS,
-    RETURN_TYPE_UNMATCH, // warning
-    // RETURN_ARRAY,
-    // PARAMETER_TYPE_UNMATCH,
-    // NOT_FUNCTION_NAME,
-
-    INCOMPATIBLE_ARRAY_DIMENSION,
-    ARRAY_SUBSCRIPT_NOT_INT,
-    PASS_ARRAY_TO_SCALAR,
-    PASS_SCALAR_TO_ARRAY
-    // ARRAY_SIZE_NOT_INT,
-    // ARRAY_SIZE_NEGATIVE,
-
-    // EXCESSIVE_ARRAY_DIM_DECLARATION,
-    // TRY_TO_INIT_ARRAY,
-    // VOID_VARIABLE,
-    // TYPEDEF_VOID_ARRAY,
-    // NOT_ASSIGNABLE,
-    // NOT_ARRAY,
-    // IS_TYPE_NOT_VARIABLE,
-    // IS_FUNCTION_NOT_VARIABLE,
-    // STRING_OPERATION,
-};
+/* 1.a */
+void printErrorMissingDecl(AST_NODE* node, char* name);
+/* 1.b */
+void printErrorRedeclaredVar(AST_NODE* idNode, char* name);
+/* 2.a */
+void printErrorTooFewArgs(AST_NODE* node, char* name);
+void printErrorTooManyArgs(AST_NODE* node, char* name);
+/* 2.b */
+void printWarningReturnTypeMismatch(AST_NODE* node);
+/* 3.a */
+void printErrorDimMismatch(AST_NODE* node );
+/* 3.b */
+void printErrorArraySubNotInt( AST_NODE* node );
+/* 3.c */
+void printErrorArrayPassToScal(AST_NODE* node, char* IDName, char* parameterName);
+void printErrorScalPassToArray(AST_NODE* node, char* IDName, char* parameterName);
+/* extra */
+void printErrorInvalidExpr(AST_NODE* node);

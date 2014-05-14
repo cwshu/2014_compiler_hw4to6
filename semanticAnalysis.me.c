@@ -131,7 +131,7 @@ void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
         if(blockChild->nodeType == VARIABLE_DECL_LIST_NODE)
             processVariableDeclList(symbolTable, varListNode);
         if(blockChild->nodeType == STMT_LIST_NODE)
-            /* checkStmtList(symbolTable, stmtListNode); */
+            processStmtList(symbolTable, stmtListNode);
         blockChild = blockChild->rightSibling;
     }
     closeScope(symbolTable);
