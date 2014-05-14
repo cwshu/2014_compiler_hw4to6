@@ -9,5 +9,5 @@ void printErrorMsg(AST_NODE* node, ErrorMsgKind errorMsgKind){
 void printErrorRedeclaredVar(AST_NODE* idNode, char* name){
     g_anyErrorOccur = 1;
     printf("Error found in line %d\n", node->linenumber);
-    printf("ID %s redeclared.", name);
+    printf("ID %s redeclared.\n", name);
 }

@@ -31,7 +31,7 @@ int countRightSibling(AST_NODE* ASTNode){
     return counter;
 }
 
-void constExprEvaluation(AST_NODE* cexprNode){
+void constExprEvaluation(AST_NODE* cexprNode, int* isInteger){
     /* processing const expression
      * used in array declaration to compute size of each dimension
      * cexpr -> mcexpr -> cfactor -> (cexpr) 
@@ -174,7 +174,7 @@ void processVariableDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     else if(declKind == VARIABLE_DECL){
         DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
         if(primitiveType == NONE_TYPE){
-            printErrorUndeclaredVar; /* UNFINISH */
+            printErrorMissingDecl(typeNode, primitiveTypeName); /* UNFINISH */
         }
 
         AST_NODE* idNode = typeNode->rightSibling;
@@ -185,34 +185,28 @@ void processVariableDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     }
 }
 
-void processFunctionDecl(AST_NODE* declarationNode){
+void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
+    AST_NODE* returnTypeNode = funcDeclarationNode->child;
+    AST_NODE* funcNamenode = returnTypeNode->rightSibling;
+    AST_NODE* paraListNode = funcNamenode->rightSibling;
+    AST_NODE* blockNode = paraListNode->rightSibling;
 
+    char* funcName = funcNamenode->semantic_value.identifierSemanticValue.identifierName;
+    
+    char* returnTypeName = returnTypeName->semantic_value.identifierSemanticValue.identifierName;
+    TypeDescriptor* returnType = typeNameToType(symbolTable, returnTypeName, 1);
+    if(returnType == NULL){
+        printErrorMissingDecl(returnTypeNode, returnTypeName);
+    }
+        
+    SymbolTableEntryKind kind = FUNC_ENTRY;
+
+    int paraNum = countRightSibling(paraListNode->child);
+    TypeDescriptor** typeOfPara = NULL; 
+    /* array of TypeDescriptor*, each point to one TypeDescriptor of one parameter */
+    if(parameterNum){
+        typeOfPara = malloc(sizeof(TypeDescriptor*) * paraNum);
+    }
 }
 
-void declareIdList(AST_NODE* typeNode, SymbolAttributeKind isVariableOrTypeAttribute, int ignoreArrayFirstDimSize);
-void declareFunction(AST_NODE* returnTypeNode);
-void processDeclarationNode(AST_NODE* declarationNode);
-
 DATA_TYPE getBiggerType(DATA_TYPE dataType1, DATA_TYPE dataType2);
-void processProgramNode(AST_NODE *programNode);
-void processDeclDimList(AST_NODE* variableDeclDimList, TypeDescriptor* typeDescriptor, int ignoreFirstDimSize);
-void processTypeNode(AST_NODE* typeNode);
-void processBlockNode(AST_NODE* blockNode);
-void processStmtNode(AST_NODE* stmtNode);
-void processGeneralNode(AST_NODE *node);
-void checkAssignOrExpr(AST_NODE* assignOrExprRelatedNode);
-void checkWhileStmt(AST_NODE* whileNode);
-void checkForStmt(AST_NODE* forNode);
-void checkAssignmentStmt(AST_NODE* assignmentNode);
-void checkIfStmt(AST_NODE* ifNode);
-void checkWriteFunction(AST_NODE* functionCallNode);
-void checkFunctionCall(AST_NODE* functionCallNode);
-void processExprRelatedNode(AST_NODE* exprRelatedNode);
-void checkParameterPassing(Parameter* formalParameter, AST_NODE* actualParameter);
-void checkReturnStmt(AST_NODE* returnNode);
-void processExprNode(AST_NODE* exprNode);
-void processVariableLValue(AST_NODE* idNode);
-void processVariableRValue(AST_NODE* idNode);
-void processConstValueNode(AST_NODE* constValueNode);
-void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue);
-void evaluateExprValue(AST_NODE* exprNode);
