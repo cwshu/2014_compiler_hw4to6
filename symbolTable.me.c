@@ -2,6 +2,9 @@
 #include "header.h"
 #include "symbolTable.me.h"
 
+/* inner function prototype */
+int hashFunction(char* str);
+
 /* some useful function */
 void malloc_strncpy(char* a, char* b, int len){
     int lenB = strlen(b); 
@@ -55,6 +58,9 @@ void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry){
     addSymbolInTableByEntry(pThis->currentInnerScope, entry);
 }
 
+SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
+SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
+/* UNFINISH */
 
 /* SymbolTableNode method definition */
 SymbolTableNode* createSymbolTableNode(){
@@ -82,17 +88,8 @@ void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry){
     }
 }
 
-/* SymbolTableEntry method definition */
-SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
-  TypeDescriptor* type, ParameterNode* functionParameterList){
-    /* constructor of SymbolTableEntry */
-    SymbolTableEntry* entry = malloc(sizeof(SymbolTableEntry));
-    malloc_strncpy(entry->name, name, ID_MAX_LEN); 
-    entry->kind = kind;
-    entry->type = type;
-    entry->functionParameterList = functionParameterList;
-    entry->next = NULL;
-}
+SymbolTableEntry* lookupSymbolInTable(SymbolTableNode* pThis, char* name);
+/* UNFINISH */
 
 int hashFunction(char* str){
     int idx=0;
@@ -102,6 +99,19 @@ int hashFunction(char* str){
         str++;
     }    
     return (idx & (TABLE_SIZE-1));
+}
+
+/* SymbolTableEntry method definition */
+SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
+  TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList){
+    /* constructor of SymbolTableEntry */
+    SymbolTableEntry* entry = malloc(sizeof(SymbolTableEntry));
+    malloc_strncpy(entry->name, name, ID_MAX_LEN); 
+    entry->kind = kind;
+    entry->type = type;
+    entry->numOfParameters = numOfPara;
+    entry->functionParameterList = functionParameterList;
+    entry->next = NULL;
 }
 
 /* TypeDescriptor method definition */

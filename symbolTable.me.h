@@ -28,7 +28,6 @@ struct SymbolTableTree{
 SymbolTableTree* createSymbolTableTree();
 void openScope(SymbolTableTree* pThis, int phase);
 void closeScope(SymbolTableTree* pThis);
-// void addSymbol(SymbolTableTree* pThis, char* name);
 void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
     /* NULL if name doesn't exist 
@@ -54,11 +53,9 @@ struct SymbolTableNode{
 };
 /* methods */
 SymbolTableNode* createSymbolTableNode();
-// void addScalarSymbolInTable(SymbolTableNode* pThis, char* name);
-// void addSymbolInTable(SymbolTableNode* pThis, char* name, TypeDescriptor* type);
 void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbolInTable(SymbolTableNode* pThis, char* name);
-int hashFunction(char* str);
+// int hashFunction(char* str);
 
 /* SymbolTableEntry and methods prototype */
 struct SymbolTableEntry{
@@ -80,7 +77,7 @@ VAR_ENTRY, TYPE_ENTRY, ARRAY_ENTRY, FUNC_ENTRY
 };
 /* methods */
 SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
-  TypeDescriptor* type, ParameterNode* functionParameterList); 
+  TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList); 
 
 /* TypeDescriptor and methods prototype */
 

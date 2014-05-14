@@ -6,7 +6,9 @@
 #include "semanticError.me.h"
 
 int g_anyErrorOccur = 0;
-void semanticAnalysis(AST_NODE* prog, STT* symbolTable);
+/* void semanticAnalysis(AST_NODE* prog, STT* symbolTable); 
+ * declared in header.h 
+ */
 
 /* Declarations(build symbolTable) */
 void processVariableDeclList(STT* symbolTable, AST_NODE* variableDeclListNode);
@@ -19,31 +21,143 @@ void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode);
 int isDeclaredCurScope(STT* symbolTable, char* name);
 TypeDescriptor* idNodeToTypeDescriptor(AST_NODE* idNode, DECL_KIND declKind, DATA_TYPE primitiveType);
 int idNodeIsArray(AST_NODE* idNode, DECL_KIND declKind);
-void constExprEvaluation(AST_NODE* cexprNode);
+int constExprEvaluation(AST_NODE* cexprNode);
 
 int countRightSibling(AST_NODE* ASTNode);
+ParameterNode* GenParameterNodeList(STT* symbolTable, AST_NODE* paraListNode){
 
 /* Statement checking */
 void checkAssignmentStmt(STT* symbolTable, AST_NODE* assignmentNode);
 
 
 /* --- Function Definition --- */
-int countRightSibling(AST_NODE* ASTNode){
-    /* count the num of rightSibling node, include self */
-    int counter = 0;
-    while(ASTNode){
-        counter += 1;
-        ASTNode = ASTNode->rightSibling;
+void semanticAnalysis(AST_NODE* prog, STT* symbolTable){
+    AST_NODE* child = prog->child;
+    while(child){
+        if(child->nodeType == VARIABLE_DECL_LIST_NODE)
+            processVariableDeclList(symbolTable, child);
+        else if(child->nodeType == DECLARATION_NODE)
+            processFunctionDecl(symbolTable, child);
+        child = child->rightSibling;
     }
-    return counter;
 }
 
-void constExprEvaluation(AST_NODE* cexprNode, int* isInteger){
+/* Declarations(build symbolTable) */
+void processVariableDeclList(STT* symbolTable, AST_NODE* variableDeclListNode){
+    /* process Declaration List, build Symbol Table */
+    AST_NODE* child = variableDeclListNode->child;
+    while(child){
+        processVariableDecl(child):
+        child = child->rightSibling; 
+    }
+}
+
+void processVariableDecl(STT* symbolTable, AST_NODE* declarationNode){
+    /* kind: VARIABLE_DECL, TYPE_DECL, FUNCTION_PARAMETER_DECL
+     * Notice: it can more than one variable declaration, like int a, b, c;
+     */
+    DECL_KIND declKind = declarationNode->semantic_value.declSemanticValue.kind;
+    AST_NODE* typeNode = declarationNode->child;
+    char* primitiveTypeName = typeNode->semantic_value.identifierSemanticValue.identifierName;
+    if(declKind == TYPE_DECL){
+        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
+        if(primitiveType == NONE_TYPE)
+            return; /* grammar error */
+        
+        AST_NODE* idNode = typeNode->rightSibling;
+        while(idNode){
+            declareTypeID(symbolTable, idNode);
+            idNode = idNode->rightSibling;
+        }
+    }
+    else if(declKind == VARIABLE_DECL || declKind == FUNCTION_PARAMETER_DECL){
+        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
+        if(primitiveType == NONE_TYPE){
+            printErrorMissingDecl(typeNode, primitiveTypeName);
+        }
+
+        AST_NODE* idNode = typeNode->rightSibling;
+        while(idNode){
+            declareScalarArrayID(symbolTable, idNode);
+            idNode = idNode->rightSibling;
+        }
+    }
+}
+
+void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
+    /* process function definition */
+    /* first: add function into symbol table */
+    AST_NODE* returnTypeNode = funcDeclarationNode->child;
+    AST_NODE* funcNameNode = returnTypeNode->rightSibling;
+    AST_NODE* paraListNode = funcNamenode->rightSibling;
+
+    char* funcName = funcNameNode->semantic_value.identifierSemanticValue.identifierName;
+    
+    char* returnTypeName = returnTypeNode->semantic_value.identifierSemanticValue.identifierName;
+    TypeDescriptor* returnType = typeNameToType(symbolTable, returnTypeName, 1);
+    if(returnType == NULL){
+        printErrorMissingDecl(returnTypeNode, returnTypeName);
+    }
+        
+    SymbolTableEntryKind kind = FUNC_ENTRY;
+
+    int paraNum = countRightSibling(paraListNode->child);
+    ParameterNode* paraList = GenParameterNodeList(symbolTable, paraListNode);
+
+    createSymbolTableEntry(funcName, kind, returnType, paraNum, paraList);
+    /* second - into block: openscope and add function parameter into symbolTable 
+     *                      and processing Decl_list + Stmt_list
+     */
+    AST_NODE* blockNode = paraListNode->rightSibling;
+    openScope(symbolTable, BUILD);
+    /* add function parameter into symboltable*/
+    AST_NODE* funcParaNode = paraListNode->child;
+    while(funcParaNode){
+        processVariableDecl(symbolTable, funcParaNode);
+        funcParaNode = funcParaNode->rightSibling;
+    }
+    AST_NODE* blockChild = blockNode->child;
+    while(blockChild){
+        if(blockChild->nodeType == VARIABLE_DECL_LIST_NODE)
+            processVariableDeclList(symbolTable, varListNode);
+        if(blockChild->nodeType == STMT_LIST_NODE)
+            /* checkStmtList(symbolTable, stmtListNode); */
+        blockChild = blockChild->rightSibling;
+    }
+    closeScope(symbolTable);
+}
+
+int constExprEvaluation(AST_NODE* cexprNode, int* isInteger){
     /* processing const expression
      * used in array declaration to compute size of each dimension
      * cexpr -> mcexpr -> cfactor -> (cexpr) 
+     *
+     * if expr isn't an integer, print error message.
      */
-    /* UNFINISH */
+    if(cexprNode->nodeType == CONST_VALUE_NODE){
+        CON_Type* constValue = cexprNode->semantic_value.const1;
+        if(constValue->const_type == FLOATC){
+            printErrorArraySubNotInt(node);
+            return constValue->const_u.fval;
+        }
+        return constValue->const_u.ival;
+    }
+    else if(cexprNode->nodeType == EXPR_NODE){
+        /* only binary op + - * / */
+        AST_NODE* child1 = cexprNode->child;
+        AST_NODE* child2 = child1->rightSibling;
+        int val1 = constExprEvaluation(child1);
+        int val2 = constExprEvaluation(child2);
+        int retVal;
+        switch(cexprNode->semantic_value.exprSemanticValue.op.binaryOp){
+            case BINARY_OP_ADD: retVal = val1 + val2; break;
+            case BINARY_OP_SUB: retVal = val1 - val2; break;
+            case BINARY_OP_MUL: retVal = val1 * val2; break;
+            case BINARY_OP_DIV: retVal = val1 / val2; break;
+        }
+        return retVal;
+    }
+    return 0; /* grammar error */
 }
 
 int idNodeIsArray(AST_NODE* idNode, DECL_KIND declKind){
@@ -108,7 +222,7 @@ void declareTypeID(STT* symbolTable, AST_NODE* idNode){
     SymbolTableEntryKind kind = TYPE_ENTRY;
     TypeDescriptor* type = idNodeToTypeDescriptor(idNode, TYPE_DECL, primitiveType);
 
-    SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, NULL);
+    SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, 0, NULL);
     addSymbolByEntry(symbolTable, entry);
 }
 
@@ -130,7 +244,7 @@ void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode){
 
     TypeDescriptor* type = idNodeToTypeDescriptor(idNode, TYPE_DECL, primitiveType);
 
-    SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, NULL);
+    SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, 0, NULL);
     addSymbolByEntry(symbolTable, entry);
     idNode = idNode->rightSibling;
 }
@@ -143,77 +257,50 @@ DATA_TYPE typeNameToType(STT* symbolTable, char* typeName, int allowTypeDef){
         return INT_TYPE;
     if(strncpy(primitiveTypeName, "float", 5) == 0)
         return FLOAT_TYPE;
-    else{
-        if(!allowTypeDef)
-            return NONE_TYPE;
-        /* UNFINISH */
-    }
+    if(strncpy(primitiveTypeName, "void", 4) == 0)
+        return VOID_TYPE;
+    if(!allowTypeDef)
+        return NONE_TYPE;
+
+    SymbolTableEntry* entry = lookupSymbolInTable(symbolTable, primitiveTypeName);
+    if(!entry) 
+        return NONE_TYPE;
+    if(entry->kind != TYPE_ENTRY) 
+        return NONE_TYPE; /* UNFINISH: */
+    return entry->type->primitiveType;
 }
 
-/* Declarations(build symbolTable) */
-void processVariableDeclList(STT* symbolTable, AST_NODE* variableDeclListNode){
-    /* process Declaration List, build Symbol Table */
-    AST_NODE* child = variableDeclListNode->child;
-    while(child){
-        processVariableDecl(child):
-        child = child->rightSibling; 
+int countRightSibling(AST_NODE* ASTNode){
+    /* count the num of rightSibling node, include self */
+    int counter = 0;
+    while(ASTNode){
+        counter += 1;
+        ASTNode = ASTNode->rightSibling;
     }
+    return counter;
 }
 
-void processVariableDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
-    /* kind: VARIABLE_DECL, TYPE_DECL, FUNCTION_PARAMETER_DECL 
-     * Notice: it can more than one variable declaration, like int a, b, c;
-     */
-    DECL_KIND declKind = declarationNode->semantic_value.declSemanticValue.kind;
-    AST_NODE* typeNode = declarationNode->child;
-    char* primitiveTypeName = typeNode->semantic_value.identifierSemanticValue.identifierName;
-    if(declKind == TYPE_DECL){
-        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
-        if(primitiveType == NONE_TYPE)
-            return; /* grammar error */
-        
-        AST_NODE* idNode = typeNode->rightSibling;
-        while(idNode){
-            declareTypeID(symbolTable, idNode);
-            idNode = idNode->rightSibling;
-        }
-    }
-    else if(declKind == VARIABLE_DECL){
-        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
-        if(primitiveType == NONE_TYPE){
-            printErrorMissingDecl(typeNode, primitiveTypeName); /* UNFINISH */
-        }
-
-        AST_NODE* idNode = typeNode->rightSibling;
-        while(idNode){
-            declareScalarArrayID(symbolTable, idNode);
-            idNode = idNode->rightSibling;
-        }
-    }
-}
-
-void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
-    AST_NODE* returnTypeNode = funcDeclarationNode->child;
-    AST_NODE* funcNamenode = returnTypeNode->rightSibling;
-    AST_NODE* paraListNode = funcNamenode->rightSibling;
-    AST_NODE* blockNode = paraListNode->rightSibling;
-
-    char* funcName = funcNamenode->semantic_value.identifierSemanticValue.identifierName;
-    
-    char* returnTypeName = returnTypeName->semantic_value.identifierSemanticValue.identifierName;
-    TypeDescriptor* returnType = typeNameToType(symbolTable, returnTypeName, 1);
-    if(returnType == NULL){
-        printErrorMissingDecl(returnTypeNode, returnTypeName);
-    }
-        
-    SymbolTableEntryKind kind = FUNC_ENTRY;
-
+ParameterNode* GenParameterNodeList(STT* symbolTable, AST_NODE* paraListNode){
+    /* use AST parameter list node to generate ParameterNodeList for symbolTableEntry */
     int paraNum = countRightSibling(paraListNode->child);
-    TypeDescriptor** typeOfPara = NULL; 
+    TypeDescriptor** typeOfParas = NULL; 
     /* array of TypeDescriptor*, each point to one TypeDescriptor of one parameter */
-    if(parameterNum){
-        typeOfPara = malloc(sizeof(TypeDescriptor*) * paraNum);
+    if(paraNum){
+        typeOfParas = malloc(sizeof(TypeDescriptor*) * paraNum);
+        int i;
+        AST_NODE* funcParaNode = paraListNode->child;
+        for(i=0; i<paraNum; i++){
+            AST_NODE* typeNode = funcParaNode->child;
+            char* typeName = typeNode->semantic_value.identifierSemanticValue.identifierName;
+            DATA_TYPE primitiveType = typeNameToType(symbolTable, typeName, 1);
+            typeOfParas[i] = idNodeToTypeDescriptor(typeNode->rightSibling, VARIABLE_DECL, primitiveType);
+
+            funcParaNode = funcParaNode->rightSibling;
+        }
     }
+    ParameterNode* paraList = createParameterList(paraNum, typeOfParas);
+    free(typeOfParas);
+    return paraList;
 }
 
 /* Statement checking */
