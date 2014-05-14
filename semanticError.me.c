@@ -1,3 +1,14 @@
+void printErrorInvalidExpr( returnNode->child ){
+    g_anyErrorOccur = 1;
+    printf("Error found in line %d\n", node->linenumber);
+    printf("Invalid expression.\n");
+}
+
+void printWarningReturnTypeMismatch(AST_NODE* node){
+    printf("Error found in line %d\n", node->linenumber);
+    printf("Warning: Incompatible return type.\n");
+}
+
 void printErrorMissingDecl(AST_NODE* node, char* name){
     g_anyErrorOccur = 1;
     printf("Error found in line %d\n", node->linenumber);
