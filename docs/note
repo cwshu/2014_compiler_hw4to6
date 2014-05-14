@@ -19,6 +19,16 @@ Type checking
    a. too few/many array dimension (except in function parameter)
    b. array subscript isn't a integer.
    c. function parameter: pass scalar to array type, or otherwise.
+ 
+Output
+++++++
+- No Type Error
+    - print "Parsing completed. No errors found." at the end of compilation.
+- else
+    - error msg::
+     
+        "Error found in line# "
+        <Additional error message> 
 
 Symbol Table
 ------------
@@ -34,3 +44,4 @@ Symbol Table
     - kind (var, typedef, array, function)
     - type/return type/typedef_type
     - array dimension/function parameter
+

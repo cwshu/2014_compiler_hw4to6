@@ -22,7 +22,7 @@ AST_NODE
         | CONST_STRING_TYPE,//for "const string"
         | NONE_TYPE,//for nodes like PROGRAM_NODE which has no type
         | ERROR_TYPE
-    - union
+    - union semantic_value
         - DECLSemanticValue declSemanticValue;
         - STMTSemanticValue stmtSemanticValue;
         - EXPRSemanticValue exprSemanticValue;
@@ -31,7 +31,7 @@ AST_NODE
 
 
 IdentifierSemanticValue identifierSemanticValue;
-    - IDENTIFIER_KIND
+    - IDENTIFIER_KIND kind
         | NORMAL_ID, //function Name, uninitialized scalar variable
         | ARRAY_ID, //ID_NODE->child = dim
         | WITH_INIT_ID, //ID_NODE->child = initial value

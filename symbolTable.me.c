@@ -14,7 +14,7 @@ void malloc_strncpy(char* a, char* b, int len){
 
 /* SymbolTableTree method definition */
 SymbolTableTree* createSymbolTableTree(){
-    /* constructor of SymbolTableTree, initial global symbolTable  */
+    /* constructor of SymbolTableTree, initial global symbolTable */
     SymbolTableTree* tree = malloc(sizeof(SymbolTableTree));
     tree->root = createSymbolTableNode();
     tree->currentLevel = 0; // global
@@ -51,6 +51,11 @@ void closeScope(SymbolTableTree* pThis){
     pThis->currentInnerScope = pThis->currentInnerScope->parent;
 }
 
+void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry){
+    addSymbolInTableByEntry(pThis->currentInnerScope, entry);
+}
+
+
 /* SymbolTableNode method definition */
 SymbolTableNode* createSymbolTableNode(){
     /* constructor of SymbolTable */
@@ -64,6 +69,19 @@ SymbolTableNode* createSymbolTableNode(){
     }
 }
 
+void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry){
+    char* name = entry->name;
+    int term = hashFunction(name);
+
+    if(symbolTable[term] == NULL){
+        symbolTable[term] = entry;
+    }
+    else{
+        entry->next = symbolTable[term];
+        symbolTable[term] = entry;
+    }
+}
+
 /* SymbolTableEntry method definition */
 SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
   TypeDescriptor* type, ParameterNode* functionParameterList){
@@ -73,6 +91,7 @@ SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind,
     entry->kind = kind;
     entry->type = type;
     entry->functionParameterList = functionParameterList;
+    entry->next = NULL;
 }
 
 int hashFunction(char* str){
@@ -86,4 +105,60 @@ int hashFunction(char* str){
 }
 
 /* TypeDescriptor method definition */
+TypeDescriptor* createScalarTypeDescriptor(DATA_TYPE primitiveType){
+    /* constructor of (scalar, typedef) SymbolTableEntry */
+    TypeDescriptor* pThis = malloc(sizeof(TypeDescriptor));
+    pThis->primitiveType = primitiveType;
+    pThis->dimension = 0;
+    return pThis;
+}
+
+TypeDescriptor* createArrayTypeDescriptor(DATA_TYPE primitiveType, 
+  int dimension, int* sizes){
+    /* constructor of (array) SymbolTableEntry */
+    TypeDescriptor* pThis = malloc(sizeof(TypeDescriptor));
+    pThis->primitiveType = primitiveType;
+    pThis->dimension = dimension;
+    int i;
+    for(i = 0; i < dimension; i++){
+        pThis->sizeInEachDimension[i] = sizes[i];
+    }
+    return pThis;
+}
+
+TypeDescriptor* copyTypeDescriptor(TypeDescriptor* pThis){
+    /* copy constructor */
+    TypeDescriptor* newType = malloc(sizeof(TypeDescriptor));
+    newType->primitiveType = pThis->primitiveType;
+    newType->dimension = pThis->dimension;
+    int i;
+    for(i=0; i<pThis->dimension; i++)
+        newType->sizeOfEachDimension[i] = pThis->sizeOfEachDimension[i];
+
+    return newType;
+}
+
 /* ParameterNode method definition */
+ParameterNode* createParameterNode(TypeDescriptor* type){
+    /* constructor of ParameterNode */
+    ParameterNode* pThis = malloc(sizeof(ParameterNode));
+    pThis->type = type;
+    pThis->next = NULL;
+}
+
+ParameterNode* prependList(ParameterNode* head, ParameterNode* list){
+    head->next = list;
+    return head;
+}
+
+ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[]){
+    /* TypeDescriptor pointer array, every pointer points to one type*/
+    ParameterNode* list = NULL;
+    int i;
+    for(i=0; i<num; i++){
+        ParameterNode* newNode = createParameterNode(parametersType[i]);
+        list = prependList(newNode, list);
+    }
+    return list;
+}
+

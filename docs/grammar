@@ -65,7 +65,7 @@ mcexpr		: mcexpr OP_TIMES cfactor
             | cfactor
             
 cfactor:	CONST
-            |MK_LPAREN cexpr MK_RPAREN
+            | MK_LPAREN cexpr MK_RPAREN
             
 init_id_list	: init_id
                 | init_id_list MK_COMMA init_id

@@ -770,12 +770,11 @@ char *argv[];
      yyin = fopen(argv[1],"r");
      yyparse();
      // printGV(prog, NULL);
+
+     SymbolTableTree* symTable = createSymbolTableTree();
      
-     initializeSymbolTable();
+     semanticAnalysis(prog, symTable);
      
-     semanticAnalysis(prog);
-     
-     symbolTableEnd();
      if (!g_anyErrorOccur) {
         printf("Parsing completed. No errors found.\n");
      }

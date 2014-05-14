@@ -28,8 +28,10 @@ struct SymbolTableTree{
 SymbolTableTree* createSymbolTableTree();
 void openScope(SymbolTableTree* pThis, int phase);
 void closeScope(SymbolTableTree* pThis);
-void addSymbol(SymbolTableTree* pThis, char* name);
+// void addSymbol(SymbolTableTree* pThis, char* name);
+void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
+SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
 
 /* SymbolTableNode and methods prototype */
 
@@ -49,19 +51,25 @@ struct SymbolTableNode{
 };
 /* methods */
 SymbolTableNode* createSymbolTableNode();
-void addSymbolInTable(SymbolTableNode* pThis, char* name);
+// void addScalarSymbolInTable(SymbolTableNode* pThis, char* name);
+// void addSymbolInTable(SymbolTableNode* pThis, char* name, TypeDescriptor* type);
+void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbolInTable(SymbolTableNode* pThis, char* name);
 int hashFunction(char* str);
 
 /* SymbolTableEntry and methods prototype */
 struct SymbolTableEntry{
-     char* name;
-     SymbolTableEntryKind kind;
-     /* var, typedef, array, function */
-     TypeDescriptor* type; /* return_type in function */
-     /* processing scalar + array type */
-     ParameterNode* functionParameterList;
-     /* Non-NULL if kind == FUNCTION */
+    char* name;
+    SymbolTableEntryKind kind;
+    /* var, typedef, array, function */
+    TypeDescriptor* type; /* return_type in function */
+    /* processing scalar + array type */
+    int numOfParameters;
+    ParameterNode* functionParameterList;
+    /* Non-NULL if kind == FUNCTION */
+
+    /* Linked-List in Hash table */
+    SymbolTableEntryKind* next;
 };
 /* enum */
 enum SymbolTableEntryKind{
@@ -80,15 +88,20 @@ struct TypeDescriptor{
     /* int, float */
     int dimension;
     /* dimension 0 means scalar type */
-    int* sizeInEachDimension[MAX_ARRAY_DIMENSION];
+    int sizeInEachDimension[MAX_ARRAY_DIMENSION];
 };
+TypeDescriptor* createScalarTypeDescriptor(DATA_TYPE primitiveType);
+TypeDescriptor* createArrayTypeDescriptor(DATA_TYPE primitiveType, int dimension, int* sizes);
+TypeDescriptor* copyTypeDescriptor(TypeDescriptor* pThis);
 
 /* ParameterNode and methods prototype */
 struct ParameterNode{
-    char* name;
-    TypeDescriptor type;
+    /* char* name; */
+    TypeDescriptor* type;
     ParameterNode* next;
 };
-ParameterNode* createParameterNode(char* name, TypeDescriptor type);
+ParameterNode* createParameterNode(TypeDescriptor* type);
+ParameterNode* prependList(ParameterNode* head, ParameterNode* list);
+ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[]);
 
 #endif
