@@ -1,105 +1,106 @@
 #ifndef __SYMBOL_TABLE_H__
 #define __SYMBOL_TABLE_H__
-
 #include "header.h"
-// This file is for reference only, you are not required to follow the implementation. //
+#define ID_MAX_LEN 256
 
+/* struct type */
+typedef struct SymbolTableTree SymbolTableTree, STT;
+typedef struct SymbolTableNode SymbolTableNode;
+typedef struct SymbolTableEntry SymbolTableEntry;
+    typedef enum SymbolTableEntryKind SymbolTableEntryKind;
+typedef struct TypeDescriptor TypeDescriptor;
+typedef struct ParameterNode ParameterNode;
 
-//SYMBOL_TABLE_PREINSERT_NAME
-#define SYMBOL_TABLE_INT_NAME "int"
-#define SYMBOL_TABLE_FLOAT_NAME "float"
-#define SYMBOL_TABLE_VOID_NAME "void"
-#define SYMBOL_TABLE_SYS_LIB_READ "read"
-#define SYMBOL_TABLE_SYS_LIB_FREAD "fread"
-#define HASH_TABLE_SIZE 256
+/* SymbolTableTree and method prototype */
 
+/* define two phase of SymbolTableTree, build and usage phase */
+#define BUILD 1
+#define USE   2
+struct SymbolTableTree{
+    /* Complete Symbol Tables, structured in Tree. */
+    SymbolTableNode* root;
+    
+    int currentLevel; /* depth of current inner symbolTable(scope), 0 means global */
+    SymbolTableNode* currentInnerScope;
+    SymbolTableNode* lastChildScope; /* the table of last closeScope */
+};
+/* methods */
+SymbolTableTree* createSymbolTableTree();
+void openScope(SymbolTableTree* pThis, int phase);
+void closeScope(SymbolTableTree* pThis);
+void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry);
+SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
+    /* NULL if name doesn't exist 
+     * else return Entry
+     */
+SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
 
-typedef enum SymbolAttributeKind
-{
-    VARIABLE_ATTRIBUTE,
-    TYPE_ATTRIBUTE,
-    FUNCTION_SIGNATURE
-} SymbolAttributeKind;
+/* SymbolTableNode and methods prototype */
 
-typedef enum TypeDescriptorKind
-{
-    SCALAR_TYPE_DESCRIPTOR,
-    ARRAY_TYPE_DESCRIPTOR,
-} TypeDescriptorKind;
+/* the num of hash table entry */
+#define TABLE_SIZE 256
+struct SymbolTableNode{
+    /* One symbol table 
+     *   implement: hash table use chaining
+     */
+    /* left-child-right-sibling tree */
+    SymbolTableNode* parent;
+    SymbolTableNode* child;
+    SymbolTableNode* rightSibling;
 
-typedef struct ArrayProperties
-{
-    int dimension;
-    int sizeInEachDimension[MAX_ARRAY_DIMENSION];
-    //point to a TypeDescriptor in the symbol table;
-    DATA_TYPE elementType;
-} ArrayProperties;
+    /* Symbol Table */
+    SymbolTableEntry* symbolTable[TABLE_SIZE];
+};
+/* methods */
+SymbolTableNode* createSymbolTableNode();
+void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry);
+SymbolTableEntry* lookupSymbolInTable(SymbolTableNode* pThis, char* name);
+// int hashFunction(char* str);
 
-typedef struct TypeDescriptor
-{
-    TypeDescriptorKind kind;
-    union
-    {
-        DATA_TYPE dataType;//kind: SCALAR_TYPE_DESCRIPTOR
-        ArrayProperties arrayProperties;//kind: ARRAY_TYPE_DESCRIPTOR
-    } properties;
-} TypeDescriptor;
-
-typedef struct Parameter
-{
-    //point to a TypeDescriptor in the symbol table;
-    struct Parameter* next;
-    TypeDescriptor* type;
-    char* parameterName;
-} Parameter;
-
-typedef struct FunctionSignature
-{
-    int parametersCount;
-    Parameter* parameterList;
-    DATA_TYPE returnType;
-} FunctionSignature;
-
-typedef struct SymbolAttribute
-{
-    SymbolAttributeKind attributeKind;
-
-    union
-    {
-        TypeDescriptor* typeDescriptor;
-        FunctionSignature* functionSignature;
-    } attr;
-} SymbolAttribute;
-
-typedef struct SymbolTableEntry
-{
-    struct SymbolTableEntry* nextInHashChain;
-    struct SymbolTableEntry* prevInHashChain;
-    struct SymbolTableEntry* nextInSameLevel;
-    struct SymbolTableEntry* sameNameInOuterLevel;
-
+/* SymbolTableEntry and methods prototype */
+/* enum */
+enum SymbolTableEntryKind{
+VAR_ENTRY, TYPE_ENTRY, ARRAY_ENTRY, FUNC_ENTRY
+};
+struct SymbolTableEntry{
     char* name;
-    SymbolAttribute* attribute;
-    int nestingLevel;
+    SymbolTableEntryKind kind;
+    /* var, typedef, array, function */
+    TypeDescriptor* type; /* return_type in function */
+    /* processing scalar + array type */
+    int numOfParameters;
+    ParameterNode* functionParameterList;
+    /* Non-NULL if kind == FUNCTION */
 
-} SymbolTableEntry;
+    /* Linked-List in Hash table */
+    SymbolTableEntry* next;
+};
+/* methods */
+SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
+  TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList); 
 
-typedef struct SymbolTable
-{
-    SymbolTableEntry* hashTable[HASH_TABLE_SIZE];
-    SymbolTableEntry** scopeDisplay;
-    int currentLevel;
-    int scopeDisplayElementCount;
-} SymbolTable;
+/* TypeDescriptor and methods prototype */
 
+/* the maximum array dimension */
+struct TypeDescriptor{
+    DATA_TYPE primitiveType;
+    /* int, float */
+    int dimension;
+    /* dimension 0 means scalar type */
+    int sizeOfEachDimension[MAX_ARRAY_DIMENSION];
+};
+TypeDescriptor* createScalarTypeDescriptor(DATA_TYPE primitiveType);
+TypeDescriptor* createArrayTypeDescriptor(DATA_TYPE primitiveType, int dimension, int* sizes);
+TypeDescriptor* copyTypeDescriptor(TypeDescriptor* pThis);
 
-void initializeSymbolTable();
-void symbolTableEnd();
-SymbolTableEntry* retrieveSymbol(char* symbolName);
-SymbolTableEntry* enterSymbol(char* symbolName, SymbolAttribute* attribute);
-void removeSymbol(char* symbolName);
-int declaredLocally(char* symbolName);
-void openScope();
-void closeScope();
+/* ParameterNode and methods prototype */
+struct ParameterNode{
+    /* char* name; */
+    TypeDescriptor* type;
+    ParameterNode* next;
+};
+ParameterNode* createParameterNode(TypeDescriptor* type);
+ParameterNode* prependList(ParameterNode* head, ParameterNode* list);
+ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[]);
 
 #endif

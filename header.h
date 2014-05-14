@@ -3,6 +3,8 @@
 
 #define MAX_ARRAY_DIMENSION 10
 
+typedef struct SymbolTableTree SymbolTableTree, STT;
+
 typedef enum DATA_TYPE
 {
     INT_TYPE,
@@ -139,12 +141,12 @@ typedef struct TypeSpecSemanticValue
 
 //don't modify or lexer may break
 typedef struct CON_Type{
-        C_type  const_type;
+    C_type  const_type;
 	union {
 		int     intval;
 		double  fval;
-		char    *sc; }
-		const_u;
+		char    *sc; 
+    } const_u;
 } CON_Type;
 
 

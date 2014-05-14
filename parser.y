@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include "header.h"
 #include "symbolTable.h"
+#include "semanticError.h"
 int linenumber = 1;
 AST_NODE *prog;
 
@@ -772,7 +773,6 @@ char *argv[];
      // printGV(prog, NULL);
 
      SymbolTableTree* symTable = createSymbolTableTree();
-     
      semanticAnalysis(prog, symTable);
      
      if (!g_anyErrorOccur) {

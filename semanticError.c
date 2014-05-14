@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include "header.h"
+#include "semanticError.h"
+extern int g_anyErrorOccur;
 /* 1.a */
 void printErrorMissingDecl(AST_NODE* node, char* name){
     g_anyErrorOccur = 1;
@@ -6,7 +10,7 @@ void printErrorMissingDecl(AST_NODE* node, char* name){
 }
 
 /* 1.b */
-void printErrorRedeclaredVar(AST_NODE* idNode, char* name){
+void printErrorRedeclaredVar(AST_NODE* node, char* name){
     g_anyErrorOccur = 1;
     printf("Error found in line %d\n", node->linenumber);
     printf("ID %s redeclared.\n", name);
