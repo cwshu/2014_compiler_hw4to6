@@ -24,7 +24,17 @@ void constExprEvaluation(AST_NODE* cexprNode);
 int countRightSibling(AST_NODE* ASTNode);
 
 /* Statement checking */
+void processStmtList(STT* symbolTable, AST_NODE* StmtListNode);
+void checkStmt(STT* symbolTable, AST_NODE* StmtNode);
+
+void checkBlock(STT *symbolTable, AST_NODE* blockNode);
+void checkWhileStmt(STT* symbolTable, AST_NODE* whileStmtNode);
+void checkForStmt(STT* symbolTable, AST_NODE* ifStmtNode);
+void checkIfStmt(STT* symbolTable, AST_NODE* forStmtNode);
 void checkAssignmentStmt(STT* symbolTable, AST_NODE* assignmentNode);
+void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode);
+void checkReturnStmt(STT* symbolTable, char* funcName, AST_NODE* returnNode);
+
 
 
 /* --- Function Definition --- */
@@ -217,6 +227,109 @@ void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
 }
 
 /* Statement checking */
+void processStmtList(STT* symbolTable, AST_NODE* StmtListNode){
+    
+    AST_NODE* child = StmtListNode->child;
+
+    while( child ){
+        checkStmt(symbolTable, child);
+        child = child -> rightSibling;
+    }
+}
+
+void checkStmt(STT* symbolTable, AST_NODE* StmtNode){
+    
+    if( StmtNode->nodeType == BLOCK_NODE )
+        checkBlock( symbolTable, StmtNode );
+    else if( StmtNode->nodeType == STMT_NODE ){
+        
+        STMT_KIND stmtKind = StmtNode->semantic_value.stmtSemanticValue.kind;
+        switch( stmtKind ){
+            case WHILE_STMT: checkWhileStmt(symbolTable, StmtNode); break;
+            case FOR_STMT: checkForStmt(symbolTable, StmtNode); break;
+            case IF_STMT: checkIfStmt(symbolTable, StmtNode); break;
+            case ASSIGN_STMT: checkAssignmentStmt(symbolTable, StmtNode); break;
+            case FUNCTION_CALL_STMT: checkFuncCallStmt(symbolTable, StmtNode); break;
+            case RETURN_STMT: checkReturnStmt(symbolTable, StmtNode); break;
+        }
+    }
+}
+
+
+void checkBlock(STT *symbolTable, AST_NODE* blockNode){
+    
+    AST_NODE* child = blockNode->child;
+    while( child ){
+    
+        if( child->nodeType == DECLARATION_NODE )
+            processVariableDeclList(symbolTable, child);
+        else if( child->nodeType == STMT_LIST_NODE )
+            processStmtList(symbolTable, child);
+    }
+
+}
+
+void checkWhileStmt(STT* symbolTable, AST_NODE* whileStmtNode){
+    AST_NODE* testNode = whileStmtNode->child;
+    AST_NODE* subStmtNode = testNode->rightSibling;
+    AST_TYPE testType = testNode->nodeType;
+
+    if(testType == STMT_NODE)
+        checkAssignmentStmt(symbolTable, testNode);
+    else
+        checkExpr(symbolTable, testNode);
+
+    checkStmt(symbolTable, subStmtNode);
+}
+
+void checkForStmt(STT* symbolTable, AST_NODE* forStmtNode){
+    AST_NODE* initCondNode = forStmtNode->child;
+    AST_NODE* terminateCondNode = initCondNode->rightSibling;
+    AST_NODE* incrementNode = terminateCondNode->rightSibling;
+    AST_NODE* subStmtNode = incrementNode->rightSibling;
+
+    if(initCondNode){
+        AST_NODE* exprNode = initCondNode->child;
+        while(exprNode){
+            checkExpr(symbolTable, exprNode);
+            exprNode = exprNode->rightSibling;
+        }
+    }
+    if(terminateCondNode){
+        AST_NODE* exprNode = terminateCondNode->child;
+        while(exprNode){
+            checkExpr(symbolTable, exprNode);
+            exprNode = exprNode->rightSibling;
+        }
+    }
+    if(incrementNode){
+        AST_NODE* exprNode = incrementNode->child;
+        while(exprNode){
+            checkExpr(symbolTable, exprNode);
+            exprNode = exprNode->rightSibling;
+        }
+    }
+
+    checkStmt(symbolTable, subStmtNode);
+}
+
+void checkIfStmt(STT* symbolTable, AST_NODE* ifStmtNode){
+    AST_NODE* testNode = ifStmtNode->child;
+    AST_NODE* subStmtNode = testNode->rightSibling;
+    AST_NODE* elseStmtNode = subStmtNode->rightSibling;
+    AST_TYPE testType = testNode->nodeType;
+
+    if(testType == STMT_NODE)
+        checkAssignmentStmt(symbolTable, testNode);
+    else
+        checkExpr(symbolTable, testNode);
+
+    checkStmt(symbolTable, subStmtNode);
+
+    if(elseStmtNode)
+        checkStmt(symbolTable, subStmtNode);
+}
+
 void checkAssignmentStmt(STT* symbolTable, AST_NODE* assignmentNode){
     
     char *name = assignmentNode->child->semantic_value.identifierSemanticValue.identifierName;
@@ -229,6 +342,85 @@ void checkAssignmentStmt(STT* symbolTable, AST_NODE* assignmentNode){
         checkDimension(symbolTable, assignmentNode->child, 0); // 0 means not function parameter
 
     checkExpr(symbolTable, assignmentNode->child->rightSibling, 0); // 0 means not function parameter
+
+}
+
+void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode){
+    char *name = expressionNode->child->semantic_value.identifierSemanticValue.identifierName;
+    symbolTableEntry *Entry = lookupSymbol(symbolTable, name);
+                                           
+    if( !Entry )
+        printErrorMissingDecl(expressionNode, name);
+    
+    AST_NODE* child = expressionNode->child->rightSibling->child;
+    int counter = 0;
+    while( child ){
+        counter++;
+        child = child->rightSibling;
+    }
+
+    if( Entry->numOfParameters < counter)
+        printErrorTooFewArgs(expressionNode, name);
+
+    else if( Entry->numOfParameters > counter)
+        printErrorTooManyArgs(expressionNode, name);
+
+    // scalar != array type
+
+    ParameterNode* cursor = Entry->functionParameterList;
+
+    AST_NODE* AST_cursor = expressionNode->child;
+    while( cursor ){
+        
+        SymbolTableEntryKind Label = VAR_ENTRY;
+
+        if( AST_cursor->AST_TYPE == IDENTIFIER_NODE ){
+            if( AST_cursor->semantic_value.identifierSemanticValue.kind == ARRAY_ID ){
+                AST_NODE* dim = AST_cursor->child;
+                int counter = 0;
+                while( dim ){
+                    counter++;
+                    dim = dim->rightSibling;
+                }
+                if( cursor->type->dimension != counter )
+                    Label = ARRAY_ENTRY;
+            }
+        }
+
+        if( cursor->type->dimension == 0 && Label == ARRAY_ENTRY )
+            printErrorArrayPassToScal(AST_cursor, Entry->name, 
+                                      AST_cursor->semantic_value.identifierSemanticValue.identifierName);
+
+        else if( cursor->type->dimension > 0 && Label == VAR_ENTRY )
+            printErrorScalPassToArray(AST_cursor, Entry->name, 
+                                      AST_cursor->semantic_value.identifierSemanticValue.identifierName);
+        
+
+        cursor = cursor -> next;
+        AST_cursor = AST_cursor -> rightSibling;
+    }
+
+    AST_NODE* AST_cursor = expressionNode->child->rightSibling->child;
+    while( AST_cursor ){
+        
+        checkExpr(SymbolTable, AST_cursor, 1);
+        AST_cursor = AST_cursor -> rightSibling;
+    }
+}
+
+void checkReturnStmt(STT* symbolTable, char* funcName, AST_NODE* returnNode){
+    
+    // check expr valid
+    checkExpr(returnNode->child);
+    // get the expr type 
+    symbolTableEntry *Entry = lookupSymbol(symbolTable, funcName);                                             
+    
+    DATA_TYPE type = getTypeOfExpr(returnNode->child);
+    
+    if( type == NONE_TYPE )
+        printErrorInvalidExpr( returnNode->child );
+    if( type != Entry->type->primitiveType )
+        printWarningReturnTypeMismatch( returnNode );
 
 }
 
@@ -248,6 +440,10 @@ void checkExpr(STT* symbolTable, AST_NODE* expressionNode, int isFuncPara){
 
     else if( expressionNode->nodeType == EXPR_NODE ){
         
+        // check expr valid
+        if( getTypeOfExpr( expressionNode ) == NONE_TYPE )
+            printErrorInvalidExpr( expressionNode );
+
         if( expressionNode->semantic_value.exprSemanticValue.kind == UNARY_OPERATION )
             checkExpr(symbolTable, expressionNode->child, 0);
         
@@ -259,67 +455,7 @@ void checkExpr(STT* symbolTable, AST_NODE* expressionNode, int isFuncPara){
     }
     
     else if( expressionNode->nodeType == STMT_NODE ){
-         
-        char *name = expressionNode->child->semantic_value.identifierSemanticValue.identifierName;
-        symbolTableEntry *Entry = lookupSymbol(symbolTable, name);
-                                               
-        if( !Entry )
-            printErrorMissingDecl(expressionNode, name);
-        
-        AST_NODE* child = expressionNode->child->rightSibling->child;
-        int counter = 0;
-        while( child ){
-            counter++;
-            child = child->rightSibling;
-        }
-
-        if( Entry->numOfParameters < counter)
-            printErrorTooFewArgs(expressionNode, name);
-
-        else if( Entry->numOfParameters > counter)
-            printErrorTooManyArgs(expressionNode, name);
-
-        // scalar != array type
-
-        ParameterNode* cursor = Entry->functionParameterList;
-
-        AST_NODE* AST_cursor = expressionNode->child;
-        while( cursor ){
-            
-            SymbolTableEntryKind Label = VAR_ENTRY;
-
-            if( AST_cursor->AST_TYPE == IDENTIFIER_NODE ){
-                if( AST_cursor->semantic_value.identifierSemanticValue.kind == ARRAY_ID ){
-                    AST_NODE* dim = AST_cursor->child;
-                    int counter = 0;
-                    while( dim ){
-                        counter++;
-                        dim = dim->rightSibling;
-                    }
-                    if( cursor->type->dimension != counter )
-                        Label = ARRAY_ENTRY;
-                }
-            }
-
-            if( cursor->type->dimension == 0 && Label == ARRAY_ENTRY )
-                printErrorArrayPassToScal(AST_cursor, Entry->name, 
-                                          AST_cursor->semantic_value.identifierSemanticValue.identifierName);
-
-            else if( cursor->type->dimension > 0 && Label == VAR_ENTRY )
-                printErrorScalPassToArray(AST_cursor, Entry->name, 
-                                          AST_cursor->semantic_value.identifierSemanticValue.identifierName);
-            
-
-            cursor = cursor -> next;
-            AST_cursor = AST_cursor -> rightSibling;
-        }
-
-        AST_NODE* AST_cursor = expressionNode->child->rightSibling->child;
-        while( AST_cursor ){
-            
-            checkExpr(SymbolTable, AST_cursor, 1);
-            AST_cursor = AST_cursor -> rightSibling;
-        }
+        checkFuncCallStmt(symbolTable, expressionNode);
     }
 }
 
@@ -347,37 +483,97 @@ void checkDimension(STT *symbolTable, AST_NODE* dimensionNode, int isFuncPara){
     child = dimensionNode->child;
     while( child ){
         
-        if( child->semantic_value->const1.const_type == FLOATC )
+        if( child->semantic_value.const1->const_type == FLOATC )
             printErrorArraySubNotInt( child );
 
         child = child->rightSibling;
     }
 }
 
-DATA_TYPE getBiggerType(DATA_TYPE dataType1, DATA_TYPE dataType2);
-void processProgramNode(AST_NODE *programNode);
-void processDeclDimList(AST_NODE* variableDeclDimList, TypeDescriptor* typeDescriptor, int ignoreFirstDimSize);
-void processTypeNode(AST_NODE* typeNode);
-void processBlockNode(AST_NODE* blockNode);
-void processGeneralNode(AST_NODE *node);
 
-void processStmtNode(AST_NODE* stmtNode);
-void checkAssignOrExpr(STT *symbolTable, AST_NODE* assignOrExprRelatedNode);
-void checkWhileStmt(AST_NODE* whileNode);
-void checkForStmt(AST_NODE* forNode);
-void checkIfStmt(AST_NODE* ifNode);
-void checkFunctionCall(AST_NODE* functionCallNode);
-void checkParameterPassing(Parameter* formalParameter, AST_NODE* actualParameter);
-void checkReturnStmt(AST_NODE* returnNode);
+DATA_TYPE getTypeOfExpr(AST_NODE* exprNode){
+    /*
+     * NUL_NODE -> VOID_TYPE
+     * CONST_NODE -> const_type: (INTC, FLOATC) -> INT_TYPE, FLOAT_TYPE
+     * FUNCTION -> returnType: (int, float, void) -> INT_TYPE, FLOAT_TYPE, VOID_TYPE
+     * ID -> (SYM_TABLE dimension = 0) int, float. -> INT_TYPE, FLOAT_TYPE
+             (SYM_TABLE dimension > 0) 
+                SYM_TABLE.dimension > AST_NODE.dimension: array -> Invalid(NONE_TYPE)
+                SYM_TABLE.dimension = AST_NODE.dimension: int, float -> INT_TYPE, FLOAT_TYPE
+     * EXPR -> childs:
+                if NONE_TYPE exist or VOID_TYPE exist -> Invalid(NONE_TYPE)
+                else if FLOAT_TYPE exist -> FLOAT_TYPE
+                else -> INT_TYPE
+     */
+    if( exprNode->nodeType == NUL_NODE )
+        return VOID_TYPE;
+    else if( exprNode->nodeType == CONST_VALUE_NODE ){
+        
+        if( exprNode->semantic_value.const1->const_type == INTC )
+            return INT_TYPE;
+        else if ( exprNode->semantic_value.const1->const_type == FLOATC )
+            return FLOAT_TYPE;
 
-void checkWriteFunction(AST_NODE* functionCallNode);
-void processExprRelatedNode(AST_NODE* exprRelatedNode);
-void processExprNode(AST_NODE* exprNode);
+    }
+    else if( exprNode->semantic_value.stmtSemanticValue.kind == FUNCTION_CALL_STMT ){
+        
+        char *name = exprNode->child->semantic_value.identifierSemanticValue.identifierName;
+        symbolTableEntry *Entry = lookupSymbol(symbolTable, name);
+        
+        if( Entry->type->primitiveType == INT_TYPE )
+            return INT_TYPE;
+        else if( Entry->type->primitiveType == FLOAT_TYPE )
+            return FLOAT_TYPE;
+        if( Entry->type->primitiveType == VOID_TYPE )
+            return VOID_TYPE;
 
-void processVariableLValue(AST_NODE* idNode);
-void processVariableRValue(AST_NODE* idNode);
+    }
+    else if( exprNode->nodeType == IDENTIFIER_NODE ){
+       
+        char *name = exprNode->child->semantic_value.identifierSemanticValue.identifierName;
+        symbolTableEntry *Entry = lookupSymbol(symbolTable, name);
+        
+        if( Entry->type->dimension == 0 ){
+            if( Entry->type->primitiveType == INT_TYPE )
+                return INT_TYPE;
+            else if( Entry->type->primitiveType == FLOAT_TYPE )
+                return FLOAT_TYPE;
+        }
+        else if( Entry->type->dimension > 0 ){
+            
+            AST_NODE* child = exprNode->child;
+            int dimCounter = 0;
+            while( child ){
+                
+                dimCounter++;
+                child = child -> rightSibling;
+            }
 
-void processConstValueNode(AST_NODE* constValueNode);
+            if( Entry->type->dimension > dimCounter )   
+                return NONE_TYPE;
+            else if( Entry->type->dimension == dimCounter ){
+                
+                if( Entry->type->primitiveType == INT_TYPE )
+                    return INT_TYPE;
+                else if( Entry->type->primitiveType == FLOAT_TYPE )
+                    return FLOAT_TYPE;
+            }
+        }
+    }
+    else if( exprNode->nodeType == EXPR_NODE ){
+        AST_NODE* child = exprNode->child;
+        
+        DATA_TYPE tempType = INT_TYPE;
+        while( child ){
+            
+            DATA_TYPE type = getTypeOfExpr(child);
 
-void getExprOrConstValue(AST_NODE* exprOrConstNode, int* iValue, float* fValue);
-void evaluateExprValue(AST_NODE* exprNode);
+            if( type == NONE_TYPE || type == VOID_TYPE )
+                return NONE_TYPE;
+            else if( type == FLOAT_TYPE )
+                tempType = FLOAT_TYPE;
+        }
+
+        return tempType;
+    }
+}
