@@ -31,6 +31,9 @@ void closeScope(SymbolTableTree* pThis);
 // void addSymbol(SymbolTableTree* pThis, char* name);
 void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
+    /* NULL if name doesn't exist 
+     * else return Entry
+     */
 SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
 
 /* SymbolTableNode and methods prototype */
