@@ -6,13 +6,14 @@
 int hashFunction(char* str);
 
 /* some useful function */
-void malloc_strncpy(char* a, char* b, int len){
+void malloc_strncpy(char** a, char* b, int len){
     int lenB = strlen(b); 
     if(lenB < len)
         len = lenB;
 
-    a = malloc(len*sizeof(char));
-    strncpy(a, b, len);
+    *a = malloc((len+1)*sizeof(char));
+    strncpy(*a, b, len);
+    (*a)[len] = '\0';
 }
 
 /* SymbolTableTree method definition */
@@ -30,10 +31,13 @@ void openScope(SymbolTableTree* pThis, int phase){
     /* Entering new scope(new block), add new symbol table. */
     if(phase == BUILD){
         SymbolTableNode* newTable = createSymbolTableNode();
+
         if(pThis->lastChildScope == NULL)
             pThis->currentInnerScope->child = newTable;
         else
             pThis->lastChildScope->rightSibling = newTable;
+
+        newTable->parent = pThis->currentInnerScope;
     }
 
     pThis->currentLevel += 1;
@@ -112,10 +116,10 @@ SymbolTableEntry* lookupSymbolInTable(SymbolTableNode* pThis, char* name){
 }
 
 int hashFunction(char* str){
-    int idx=0;
+    int idx = 0;
     while(*str){
         idx = idx << 1;
-        idx+=*str;
+        idx += *str;
         str++;
     }    
     return (idx & (TABLE_SIZE-1));
@@ -126,7 +130,7 @@ SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind,
   TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList){
     /* constructor of SymbolTableEntry */
     SymbolTableEntry* entry = malloc(sizeof(SymbolTableEntry));
-    malloc_strncpy(entry->name, name, ID_MAX_LEN); 
+    malloc_strncpy(&(entry->name), name, ID_MAX_LEN); 
     entry->kind = kind;
     entry->type = type;
     entry->numOfParameters = numOfPara;
@@ -169,9 +173,10 @@ TypeDescriptor* copyTypeDescriptor(TypeDescriptor* pThis){
 }
 
 /* ParameterNode method definition */
-ParameterNode* createParameterNode(TypeDescriptor* type){
+ParameterNode* createParameterNode(TypeDescriptor* type, char* name){
     /* constructor of ParameterNode */
     ParameterNode* pThis = malloc(sizeof(ParameterNode));
+    malloc_strncpy(&(pThis->name), name, ID_MAX_LEN);
     pThis->type = type;
     pThis->next = NULL;
 }
@@ -181,12 +186,12 @@ ParameterNode* prependList(ParameterNode* head, ParameterNode* list){
     return head;
 }
 
-ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[]){
+ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[], char* nameOfParas[]){
     /* TypeDescriptor pointer array, every pointer points to one type*/
     ParameterNode* list = NULL;
     int i;
-    for(i=0; i<num; i++){
-        ParameterNode* newNode = createParameterNode(parametersType[i]);
+    for(i=num-1; i>=0; i--){
+        ParameterNode* newNode = createParameterNode(parametersType[i], nameOfParas[i]);
         list = prependList(newNode, list);
     }
     return list;

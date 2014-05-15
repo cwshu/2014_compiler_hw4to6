@@ -95,12 +95,12 @@ TypeDescriptor* copyTypeDescriptor(TypeDescriptor* pThis);
 
 /* ParameterNode and methods prototype */
 struct ParameterNode{
-    /* char* name; */
+    char* name;
     TypeDescriptor* type;
     ParameterNode* next;
 };
-ParameterNode* createParameterNode(TypeDescriptor* type);
+ParameterNode* createParameterNode(TypeDescriptor* type, char* name);
 ParameterNode* prependList(ParameterNode* head, ParameterNode* list);
-ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[]);
+ParameterNode* createParameterList(int num, TypeDescriptor* parametersType[], char* nameOfParas[]);
 
 #endif
