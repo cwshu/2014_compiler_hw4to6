@@ -31,8 +31,8 @@ void printErrorTooManyArgs(AST_NODE* node, char* name){
 
 /* 2.b */
 void printWarningReturnTypeMismatch(AST_NODE* node){
-    printf("Error found in line %d\n", node->linenumber);
-    printf("Warning: Incompatible return type.\n");
+    printf("Warning found in line %d\n", node->linenumber);
+    printf("Incompatible return type.\n");
 }
 
 /* 3.a */

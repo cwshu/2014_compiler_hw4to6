@@ -3,3 +3,5 @@
 *.o
 parser
 cscope.out
+*.gv
+*.png

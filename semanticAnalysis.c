@@ -263,7 +263,7 @@ void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiv
     else
         kind = VAR_ENTRY;
 
-    TypeDescriptor* type = idNodeToTypeDescriptor(idNode, TYPE_DECL, primitiveType);
+    TypeDescriptor* type = idNodeToTypeDescriptor(idNode, VARIABLE_DECL, primitiveType);
 
     SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, 0, NULL);
     addSymbolByEntry(symbolTable, entry);
@@ -606,8 +606,8 @@ void checkDimension(STT *symbolTable, AST_NODE* dimensionNode, int isFuncPara){
     // check if array subscript is int
     child = dimensionNode->child;
     while( child ){
-        
-        if( child->semantic_value.const1->const_type == FLOATC )
+        DATA_TYPE exprType = getTypeOfExpr(symbolTable, child);
+        if(exprType != INT_TYPE)
             printErrorArraySubNotInt( child );
 
         child = child->rightSibling;
