@@ -50,13 +50,13 @@ void printErrorArraySubNotInt( AST_NODE* node ){
 }
 
 /* 3.c */
-void printErrorArrayPassToScal(AST_NODE* node, char* IDName, char* parameterName){
+void printErrorArrayPassToScal(AST_NODE* node, char* parameterName, char* IDName){
     g_anyErrorOccur = 1;
     printf("Error found in line %d\n", node->linenumber);
     printf("Array %s passed to scalar parameter %s.\n", IDName, parameterName);
 }
 
-void printErrorScalPassToArray(AST_NODE* node, char* IDName, char* parameterName){
+void printErrorScalPassToArray(AST_NODE* node, char* parameterName, char* IDName){
     g_anyErrorOccur = 1;
     printf("Error found in line %d\n", node->linenumber);
     printf("Scalar %s passed to array parameter %s.\n", IDName, parameterName);
@@ -69,3 +69,8 @@ void printErrorInvalidExpr(AST_NODE* node){
     printf("Invalid expression.\n");
 }
 
+void printErrorNonIdScalPassToArray(AST_NODE* node, char* parameterName){
+    g_anyErrorOccur = 1;
+    printf("Error found in line %d\n", node->linenumber);
+    printf("Constant, Function return value, or Expression passed to array parameter %s.\n", parameterName);
+}
