@@ -106,6 +106,10 @@ void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     AST_NODE* paraListNode = funcNameNode->rightSibling;
 
     char* funcName = funcNameNode->semantic_value.identifierSemanticValue.identifierName;
+    if(isDeclaredCurScope(symbolTable, funcName)){
+        printErrorRedeclaredVar(funcNameNode, funcName);
+        return;
+    }
     
     char* returnTypeName = returnTypeNode->semantic_value.identifierSemanticValue.identifierName;
     DATA_TYPE returnType = typeNameToType(symbolTable, returnTypeName, 1);
@@ -362,11 +366,13 @@ void checkStmt(STT* symbolTable, AST_NODE* StmtNode, char* funcName){
 
 
 void checkBlock(STT *symbolTable, AST_NODE* blockNode, char* funcName){
-    
+
+    openScope(symbolTable, BUILD);
+
     AST_NODE* child = blockNode->child;
     while( child ){
     
-        if( child->nodeType == DECLARATION_NODE )
+        if( child->nodeType == VARIABLE_DECL_LIST_NODE )
             processVariableDeclList(symbolTable, child);
         else if( child->nodeType == STMT_LIST_NODE )
             processStmtList(symbolTable, child, funcName);
@@ -374,6 +380,7 @@ void checkBlock(STT *symbolTable, AST_NODE* blockNode, char* funcName){
         child = child->rightSibling;
     }
 
+    closeScope(symbolTable);
 }
 
 void checkWhileStmt(STT* symbolTable, AST_NODE* whileStmtNode, char* funcName){
