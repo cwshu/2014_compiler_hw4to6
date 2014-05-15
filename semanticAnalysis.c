@@ -21,7 +21,7 @@ void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiv
 int isDeclaredCurScope(STT* symbolTable, char* name);
 TypeDescriptor* idNodeToTypeDescriptor(AST_NODE* idNode, DECL_KIND declKind, DATA_TYPE primitiveType);
 int idNodeIsArray(AST_NODE* idNode, DECL_KIND declKind);
-int constExprEvaluation(AST_NODE* cexprNode);
+int constExprEvaluation(AST_NODE* cexprNode, int* isError);
 
 int countRightSibling(AST_NODE* ASTNode);
 ParameterNode* GenParameterNodeList(STT* symbolTable, AST_NODE* paraListNode);
@@ -150,27 +150,39 @@ void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     closeScope(symbolTable);
 }
 
-int constExprEvaluation(AST_NODE* cexprNode){
+int constExprEvaluation(AST_NODE* cexprNode, int* pIsError){
     /* processing const expression
      * used in array declaration to compute size of each dimension
      * cexpr -> mcexpr -> cfactor -> (cexpr) 
      *
      * if expr isn't an integer, print error message.
      */
+    int alloc = 0;
+    if(!pIsError){
+        pIsError = malloc(sizeof(int));
+        *pIsError = 0;
+        alloc = 1;
+    }
+
     if(cexprNode->nodeType == CONST_VALUE_NODE){
         CON_Type* constValue = cexprNode->semantic_value.const1;
         if(constValue->const_type == FLOATC){
-            printErrorArraySubNotInt(cexprNode);
+            if(!(*pIsError)){
+                printErrorArraySubNotInt(cexprNode);
+                *pIsError = 1;
+            }
+            if(alloc) free(pIsError);
             return constValue->const_u.fval;
         }
+        if(alloc) free(pIsError);
         return constValue->const_u.intval;
     }
     else if(cexprNode->nodeType == EXPR_NODE){
         /* only binary op + - * / */
         AST_NODE* child1 = cexprNode->child;
         AST_NODE* child2 = child1->rightSibling;
-        int val1 = constExprEvaluation(child1);
-        int val2 = constExprEvaluation(child2);
+        int val1 = constExprEvaluation(child1, pIsError);
+        int val2 = constExprEvaluation(child2, pIsError);
         int retVal;
         switch(cexprNode->semantic_value.exprSemanticValue.op.binaryOp){
             case BINARY_OP_ADD: retVal = val1 + val2; break;
@@ -178,8 +190,10 @@ int constExprEvaluation(AST_NODE* cexprNode){
             case BINARY_OP_MUL: retVal = val1 * val2; break;
             case BINARY_OP_DIV: retVal = val1 / val2; break;
         }
+        if(alloc) free(pIsError);
         return retVal;
     }
+    if(alloc) free(pIsError);
     return 0; /* grammar error */
 }
 
@@ -216,7 +230,7 @@ TypeDescriptor* idNodeToTypeDescriptor(AST_NODE* idNode, DECL_KIND declKind, DAT
         AST_NODE* pThisDimensionNode = idNode->child;
         int sizeInEachDimension[MAX_ARRAY_DIMENSION];
         while(pThisDimensionNode){
-            sizeInEachDimension[dimension] = constExprEvaluation(pThisDimensionNode);
+            sizeInEachDimension[dimension] = constExprEvaluation(pThisDimensionNode, NULL);
             dimension += 1;
             pThisDimensionNode = pThisDimensionNode->rightSibling;
         }
@@ -469,10 +483,10 @@ void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode){
     if(parametersParent)
         counter = countRightSibling(parametersParent->child);
 
-    if( Entry->numOfParameters < counter)
+    if( counter < Entry->numOfParameters )
         printErrorTooFewArgs(expressionNode, name);
 
-    else if( Entry->numOfParameters > counter)
+    else if( counter > Entry->numOfParameters )
         printErrorTooManyArgs(expressionNode, name);
 
     if(counter == 0)
@@ -484,11 +498,12 @@ void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode){
 
     AST_NODE* AST_cursor = parametersParent->child;
     while( cursor ){
-        
         SymbolTableEntryKind Label = VAR_ENTRY;
 
         if( AST_cursor->nodeType == IDENTIFIER_NODE ){
-            if( cursor->type->dimension > 0){
+            char* ASTIdName = AST_cursor->semantic_value.identifierSemanticValue.identifierName;
+            SymbolTableEntry* AST_entry = lookupSymbol(symbolTable, ASTIdName);
+            if( AST_entry->type->dimension > 0){
                 /* array */
                 AST_NODE* dim = AST_cursor->child;
                 int counter = 0;
@@ -496,7 +511,7 @@ void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode){
                     counter++;
                     dim = dim->rightSibling;
                 }
-                if( cursor->type->dimension != counter )
+                if( AST_entry->type->dimension != counter )
                     Label = ARRAY_ENTRY;
             }
         }
