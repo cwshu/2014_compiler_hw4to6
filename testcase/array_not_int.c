@@ -1,3 +1,7 @@
+int f1(int a[][1.5 + 2.5]){
+
+}
+
 int main(){
     int a[10], b = 1, c = 3;
     float d = 2.5;
