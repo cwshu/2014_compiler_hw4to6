@@ -121,3 +121,34 @@ relop_expr_list	: nonempty_relop_expr_list
 nonempty_relop_expr_list	: nonempty_relop_expr_list MK_COMMA relop_expr
                             | relop_expr
                             
+expr        : expr add_op term 
+            | term 
+
+add_op      : OP_PLUS
+            | OP_MINUS 
+
+term        : term mul_op factor
+            | factor
+
+mul_op      : OP_TIMES
+            | OP_DIVIDE 
+
+factor      : MK_LPAREN relop_expr MK_RPAREN
+            | OP_MINUS MK_LPAREN relop_expr MK_RPAREN 
+            | OP_NOT MK_LPAREN relop_expr MK_RPAREN
+            | CONST 
+            | OP_MINUS CONST 
+            | OP_NOT CONST
+            | ID MK_LPAREN relop_expr_list MK_RPAREN 
+            | OP_MINUS ID MK_LPAREN relop_expr_list MK_RPAREN 
+            | OP_NOT ID MK_LPAREN relop_expr_list MK_RPAREN
+            | var_ref 
+            | OP_MINUS var_ref 
+            | OP_NOT var_ref 
+
+var_ref     : ID 
+            | ID dim_list 
+
+
+dim_list    : dim_list MK_LB expr MK_RB 
+            | MK_LB expr MK_RB
