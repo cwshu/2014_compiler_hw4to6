@@ -64,13 +64,15 @@ VAR_ENTRY, TYPE_ENTRY, ARRAY_ENTRY, FUNC_ENTRY
 };
 struct SymbolTableEntry{
     char* name;
-    SymbolTableEntryKind kind;
-    /* var, typedef, array, function */
+    SymbolTableEntryKind kind; /* var, typedef, array, function */
     TypeDescriptor* type; /* return_type in function */
+
     /* processing scalar + array type */
     int numOfParameters;
-    ParameterNode* functionParameterList;
-    /* Non-NULL if kind == FUNCTION */
+    ParameterNode* functionParameterList; /* Non-NULL if kind == FUNCTION */
+
+    /* variable address */
+    int stackOffset;
 
     /* Linked-List in Hash table */
     SymbolTableEntry* next;
@@ -78,6 +80,7 @@ struct SymbolTableEntry{
 /* methods */
 SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
   TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList); 
+// void addOffset(SymbolTableEntry entry, int offset);
 
 /* TypeDescriptor and methods prototype */
 
