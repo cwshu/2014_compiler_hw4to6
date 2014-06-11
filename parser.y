@@ -8,6 +8,9 @@
 #include "header.h"
 #include "symbolTable.h"
 #include "semanticError.h"
+struct GlobalResource GR;
+GRinit(&GR);
+
 int linenumber = 1;
 AST_NODE *prog;
 

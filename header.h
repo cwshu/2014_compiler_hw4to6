@@ -1,6 +1,18 @@
 #ifndef __HEADER_H__
 #define __HEADER_H__
 
+struct GlobalResource {
+    int labelCounter;
+    RegisterManager regManager;
+    int stackTop;
+};
+
+void GRinit(struct GlobalResource* GR){
+    GR->labelCounter = 1;
+    GR->stackTop = 36;
+    RMinit(&(GR.regManager));
+}
+
 #define MAX_ARRAY_DIMENSION 10
 
 typedef struct SymbolTableTree SymbolTableTree, STT;
@@ -165,10 +177,27 @@ struct AST_NODE {
         EXPRSemanticValue exprSemanticValue;
 		CON_Type *const1;
 	} semantic_value;
+    struct ExpValPlace valPlace;
 };
 typedef struct AST_NODE AST_NODE;
 
 AST_NODE *Allocate(AST_TYPE type);
 void semanticAnalysis(AST_NODE *prog, STT* symbolTable);
 
+
+typedef enum ExpValPlaceKind{
+    NULL_TYPE,
+    REG_TYPE,
+    STACK_TYPE,
+    MEMADDR_TYPE
+};
+
+struct ExpValPlace{
+    ExpValPlaceKind kind;
+    union {
+        int regNum;
+        int stackOffset;
+        int memAddr;
+    } place;
+};
 #endif

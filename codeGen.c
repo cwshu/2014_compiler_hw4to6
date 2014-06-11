@@ -203,3 +203,59 @@ _end_{funcName}:
 .data
     _framesize_{funcName}: .word 36 + {localVarSize}
  */
+
+/* Data Resourse, RegisterManager */
+void RMinit(RegisterManager* pThis){
+    for(int i=0; i<MAX_REG_NUM; i++){
+        pThis->regFull[i] = 0;
+        pThis->regUser[i] = NULL;
+    }
+    pThis->lastReg = 0;
+    for(int i=0; i<MAX_FP_REG_NUM; i++){
+        pThis->FPregFull[i] = 0;
+        pThis->FPregUser[i] = NULL;
+    }
+    pThis->lastFPReg = 0;
+}
+
+int getReg(RegisterManager* pThis, FILE* targetFile){
+    /* get empty register to use, return register Number (16 ~ 23 for s0 ~ s7, r16 ~ r23 ) */
+    int regIndex = findEmptyReg(pThis);
+    if(regIndex != -1)
+        return regIndex;
+    
+    regIndex = findEarlestUsedReg(pThis);
+    spillReg(pThis, regIndex, targetFile);
+    return regIndex + 16; // s0 = r16 in mips
+}
+
+void releaseReg(RegisterManager* pThis, int regNum){
+    pThis->regFull[regNum - 16] = 0;
+}
+
+int findEmptyReg(RegisterManager* pThis){
+    int index = pThis->lastReg+1;
+    while(index != pThis->lastReg){
+        if(index == NULL){
+            pThis->regFull[index] = 1;
+            return index;
+        }
+        index = (index+1)%MAX_REG_NUM;
+    }
+    return -1;
+}
+
+int findEarlestUsedReg(RegisterManager* pThis){
+    return pThis->lastReg + 1;
+}
+
+void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
+    ExpValPlace* place = pThis->regUser[regIndex]->valPlace
+    place->kind = STACK_TYPE;
+
+    fprintf(targetFile, "sw $r%d %d($fp)\n", regIndex+16, GR.stackTop + 4);
+    place->kind = MEMADDR_TYPE;
+    place->place.stackOffset = GR.stackTop + 4;
+    GR.stackTop += 4;
+}
+
