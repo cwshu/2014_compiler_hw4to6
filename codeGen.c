@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include "codeGen.h"
 
+#define GLOBAL 1
+#define LOCAL 2
+
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
     AST_NODE* child = prog->child;
     while(child){
@@ -14,20 +17,64 @@ void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
 }
 
 /*** variable declare ***/
-void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode){
+void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode, int* pLocalVarSize){
     /* codegen Declaration List */
     AST_NODE* child = variableDeclListNode->child;
+
+    int kind = LOCAL;
+    if(symbolTable->currentLevel == 0)
+        kind = GLOBAL;
+
+    if(kind == GLOBAL){
+        fprintf(targetFile, ".data\n");
+    }
+
     while(child){
-        genVariableDecl(targetFile, symbolTable, child);
+        genVariableDecl(targetFile, symbolTable, child, kind, pLocalVarSize);
         child = child->rightSibling; 
     }
+
+    if(kind == GLOBAL)
+        return 0;
 }
 
-void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode){
+void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode, 
+  int kind, int* pLocalVarSizeNow){
     /* kind: VARIABLE_DECL
      * Notice: it can more than one variable declaration, like int a, b, c;
      */
     /* no initial value now */
+    DECL_KIND declKind = declarationNode->semantic_value.declSemanticValue.kind;
+    if(declKind != VARIABLE_DECL)
+        return 0;
+
+    AST_NODE* variableNode = declarationNode->child->rightSibling;
+
+    while(variableNode){
+        char* varName = variableNode->semantic_value.identifierSemanticValue->identifierName;
+        SymbolTableEntry* entry = lookupSymbol(symbolTable, varName);
+        TypeDescriptor* type = entry->type;
+
+        int varSize = 4; // int and float
+        for(int i=0; i<type->dimension; i++){
+            varSize *= type->sizeOfEachDimension[i]; 
+        }
+
+        if(kind == GLOBAL){
+            if(type->dimension != 0)
+                fprintf(targetFile, "%s: .space %d", entry->name, varSize);
+            else if(type->primitiveType == INT_TYPE)
+                fprintf(targetFile, "%s: .word", entry->name);
+            else if(type->primitiveType == FLOAT_TYPE)
+                fprintf(targetFile, "%s: .float", entry->name);
+        }
+        else if(kind == LOCAL){
+            entry->stackOffset = *pLocalVarSizeNow + 4;    
+            *pLocalVarSizeNow += entry->stackOffset;
+        }
+
+        variableNode = variableNode->rightSibling;
+    }
 }
 
 /*** function implementation ***/
@@ -51,15 +98,16 @@ void genFuncDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     genPrologue(targetFile, funcName);
 
     AST_NODE* blockChild = blockNode->child;
+    int localVarSize = 0;
     while(blockChild){
         if(blockChild->nodeType == VARIABLE_DECL_LIST_NODE)
-            // processVariableDeclList(symbolTable, blockChild);
+            genVariableDeclList(targetFile, symbolTable, blockChild, &localVarSize);
         if(blockChild->nodeType == STMT_LIST_NODE)
-            // processStmtList(symbolTable, blockChild, funcName);
+            localVarSize += genStmtList(targetFile, symbolTable, blockChild, funcName);
         blockChild = blockChild->rightSibling;
     }
 
-    genEpilogue(targetFile, funcName);
+    genEpilogue(targetFile, funcName, localVarSize);
     closeScope(symbolTable);
 }
 
