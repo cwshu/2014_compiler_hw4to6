@@ -187,9 +187,10 @@ void semanticAnalysis(AST_NODE *prog, STT* symbolTable);
 
 typedef enum ExpValPlaceKind{
     NULL_TYPE,
-    REG_TYPE,
+    INT_REG_TYPE,
+    FLOAT_REG_TYPE,
     STACK_TYPE,
-    MEMADDR_TYPE
+    LABEL_TYPE 
 };
 
 struct ExpValPlace{
@@ -197,7 +198,7 @@ struct ExpValPlace{
     union {
         int regNum;
         int stackOffset;
-        int memAddr;
+        char* label;
     } place;
 };
 #endif
