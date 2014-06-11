@@ -27,13 +27,19 @@ struct RegisterManager {
 };
 
 void RMinit(RegisterManager* pThis);
+
 int getReg(RegisterManager* pThis, FILE* targetFile);
 /* get empty register to use, return register Number (16 ~ 23 for s0 ~ s7(r16 ~ r23) ) */
+void releaseReg(RegisterManager* pThis, int regNum);
+/* release register */
 void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile);
-void releaseReg(RegisterManager* pThis);
 int findEmptyReg(RegisterManager* pThis);
 int findEarlestUsedReg(RegisterManager* pThis);
-void spillReg(RegisterManager* pThis);
+
 int getFPReg(RegisterManager* pThis, FILE* targetFile);
 /* get empty floating-point register to use, return register Number (0 ~ 31 for f0 ~ f31) */
-
+void releaseFPReg(FPRegisterManager* pThis, int regNum);
+/* release floating-point register */
+void spillFPReg(FPRegisterManager* pThis, int regIndex, FILE* targetFile);
+int findEmptyFPReg(FPRegisterManager* pThis);
+int findEarlestUsedFPReg(FPRegisterManager* pThis);

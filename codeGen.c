@@ -221,8 +221,10 @@ void RMinit(RegisterManager* pThis){
 int getReg(RegisterManager* pThis, FILE* targetFile){
     /* get empty register to use, return register Number (16 ~ 23 for s0 ~ s7, r16 ~ r23 ) */
     int regIndex = findEmptyReg(pThis);
-    if(regIndex != -1)
+    if(regIndex != -1){
+        pThis->regFull[index] = 1;
         return regIndex;
+    }
     
     regIndex = findEarlestUsedReg(pThis);
     spillReg(pThis, regIndex, targetFile);
@@ -236,10 +238,8 @@ void releaseReg(RegisterManager* pThis, int regNum){
 int findEmptyReg(RegisterManager* pThis){
     int index = pThis->lastReg+1;
     while(index != pThis->lastReg){
-        if(index == NULL){
-            pThis->regFull[index] = 1;
+        if(index == NULL)
             return index;
-        }
         index = (index+1)%MAX_REG_NUM;
     }
     return -1;
@@ -251,11 +251,50 @@ int findEarlestUsedReg(RegisterManager* pThis){
 
 void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
     ExpValPlace* place = pThis->regUser[regIndex]->valPlace
-    place->kind = STACK_TYPE;
 
-    fprintf(targetFile, "sw $r%d %d($fp)\n", regIndex+16, GR.stackTop + 4);
+    fprintf(targetFile, "sw $r%d, %d($fp)\n", regIndex+16, GR.stackTop + 4);
     place->kind = MEMADDR_TYPE;
     place->place.stackOffset = GR.stackTop + 4;
     GR.stackTop += 4;
 }
 
+/* floating point */
+int getFPReg(RegisterManager* pThis, FILE* targetFile){
+    /* get empty floating-point register to use, return register Number (0 ~ 31 for f0 ~ f31) */
+    int regIndex = findEmptyReg(pThis);
+    if(regIndex != -1){
+        pThis->FPregFull[index] = 1;
+        return regIndex;
+    }
+    
+    regIndex = findEarlestUsedFPReg(pThis);
+    spillFPReg(pThis, regIndex, targetFile);
+    return regIndex;
+}
+
+void releaseFPReg(RegisterManager* pThis, int regNum){
+    pThis->regFPFull[regNum] = 0;
+}
+
+int findEmptyFPReg(RegisterManager* pThis){
+    int index = pThis->lastFPReg+1;
+    while(index != pThis->lastFPReg){
+        if(index == NULL)
+            return index;
+        index = (index+1)%MAX_FP_REG_NUM;
+    }
+    return -1;
+}
+
+int findEarlestUsedFPReg(RegisterManager* pThis){
+    return pThis->lastFPReg + 1;
+}
+
+void spillFPReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
+    ExpValPlace* place = pThis->regUser[regIndex]->valPlace
+
+    fprintf(targetFile, "l.s $f%d, %d($fp)\n", regIndex+16, GR.stackTop + 4);
+    place->kind = MEMADDR_TYPE;
+    place->place.stackOffset = GR.stackTop + 4;
+    GR.stackTop += 4;
+}
