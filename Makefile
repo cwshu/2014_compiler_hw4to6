@@ -8,7 +8,7 @@ YACCFLAG = -d
 LIBS = -lfl 
 
 parser: parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o semanticError.o codeGen.o AST_place.o globalResource.o
-	$(CC) -o $(TARGET) parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o semanticError.o codeGen.o AST_place.o $(LIBS)
+	$(CC) -o $(TARGET) parser.tab.o alloc.o functions.o symbolTable.o semanticAnalysis.o semanticError.o codeGen.o AST_place.o globalResource.o $(LIBS)
 
 parser.tab.o: parser.tab.c lex.yy.c alloc.o functions.c symbolTable.o semanticAnalysis.o
 	$(CC) -c parser.tab.c

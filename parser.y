@@ -8,7 +8,7 @@
 #include "header.h"
 #include "symbolTable.h"
 #include "semanticError.h"
-GlobalResource GR;
+extern GlobalResource GR;
 
 int linenumber = 1;
 AST_NODE *prog;
@@ -768,8 +768,8 @@ dim_list	: dim_list MK_LB expr MK_RB
 #include "lex.yy.c"
 int main(int argc, char *argv[]){
     if(argc != 3){
-        print("Error arguments number\n");
-        print("[compiler] [input] [out]\n");
+        printf("Error arguments number\n");
+        printf("[compiler] [input] [out]\n");
         return;
     }
 

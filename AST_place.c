@@ -1,4 +1,4 @@
-#include "AST_place.h"
+#include "header.h"
 void setPlaceOfASTNodeToReg(AST_NODE *pThis, DATA_TYPE primiType, int regNum){
     pThis->valPlace.dataType = primiType;
     pThis->valPlace.kind = REG_TYPE;

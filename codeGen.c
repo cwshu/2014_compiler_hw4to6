@@ -7,7 +7,7 @@
 
 #define GLOBAL 1
 #define LOCAL 2
-extern GlobalResource GR;
+GlobalResource GR;
 
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
     AST_NODE* child = prog->child;
@@ -83,9 +83,9 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
 }
 
 /*** function implementation ***/
-void genFuncDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
+void genFuncDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode){
     /* codegen for function definition */
-    AST_NODE* returnTypeNode = funcDeclarationNode->child;
+    AST_NODE* returnTypeNode = declarationNode->child;
     AST_NODE* funcNameNode = returnTypeNode->rightSibling;
     AST_NODE* paraListNode = funcNameNode->rightSibling;
     AST_NODE* blockNode = paraListNode->rightSibling;
@@ -329,12 +329,12 @@ void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, cha
 
     if(returnType == INT_TYPE){
         int retRegNum = getExprNodeReg(targetFile, returnNode->child);
-        fprinf(targetFile, "move $r%d, $r%d\n", INT_RETURN_REG, retRegNum);
+        fprintf(targetFile, "move $r%s, $r%d\n", INT_RETURN_REG, retRegNum);
         releaseReg(GR.regManager, retRegNum);
     }
     else if(returnType == FLOAT_TYPE){
         int retRegNum = getExprNodeReg(targetFile, returnNode->child);
-        fprinf(targetFile, "mov.s $f%d, $f%d\n", FLOAT_RETURN_REG, retRegNum);
+        fprintf(targetFile, "mov.s $f%s, $f%d\n", FLOAT_RETURN_REG, retRegNum);
         releaseReg(GR.FPRegManager, retRegNum);
     }
 
@@ -389,7 +389,7 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
             fprintf(targetFile, "s.s $r%d, %d($fp)\n", rvalueRegNum, lvalueEntry->stackOffset);
         else if(lvalueScope == GLOBAL)
             fprintf(targetFile, "s.s $f%d, %s\n", rvalueRegNum, lvalueEntry->name);
-        releaseFPReg(rvalueRegNum);
+        releaseReg(GR.FPRegManager, rvalueRegNum);
     }
 }
 
@@ -672,7 +672,7 @@ void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
     int regNum = regIndex + pThis->firstRegNum;
     if(pThis->regUser[regIndex]){
         /* if AST_NODE (register user) exist */
-        ExpValPlace* place = pThis->regUser[regIndex]->valPlace;
+        ExpValPlace* place = &(pThis->regUser[regIndex]->valPlace);
 
         /* store value of register into stack */
         fprintf(targetFile, "sw $r%d, %d($fp)\n", regNum, GR.stackTop + 4);
@@ -699,7 +699,7 @@ void addConstString(ConstStringSet* pThis, int labelNum, char* string){
 void genConstStrings(ConstStringSet* pThis, FILE* targetFile){
     int i;
     for(i=0; i<pThis->numOfConstString; i++){
-        ConstStringPair* pair = pThis->constStrings[i];
+        ConstStringPair* pair = &(pThis->constStrings[i]);
         fprintf(targetFile, "L%d: .asciiz %s\n", pair->labelNum, pair->string);
     }
 }
@@ -958,7 +958,7 @@ void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode){
         
         char *constString = ExprNode->semantic_value.const1->const_u.sc;
         int constStringLabel = GR.labelCounter++;
-        addConstString(GR.constStrings, constStringLabel, constStrings);
+        addConstString(GR.constStrings, constStringLabel, constString);
         fprintf(targetFile, "li $v0, 4\n");
         fprintf(targetFile, "la $a0 L%d\n", constStringLabel);
         fprintf(targetFile, "syscall\n");

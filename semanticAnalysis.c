@@ -5,6 +5,13 @@
 #include "symbolTable.h"
 #include "semanticError.h"
 
+int isIgnoreFunctionName(char* name){
+    if(strncmp(name, "read", 4) == 0) return 1;
+    if(strncmp(name, "fread", 5) == 0) return 1;
+    if(strncmp(name, "write", 5) == 0) return 1;
+    return 0;
+}
+
 int g_anyErrorOccur = 0;
 /* void semanticAnalysis(AST_NODE* prog, STT* symbolTable); 
  * declared in header.h 
@@ -471,6 +478,10 @@ void checkAssignmentStmt(STT* symbolTable, AST_NODE* assignmentNode){
 
 void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode){
     char *name = expressionNode->child->semantic_value.identifierSemanticValue.identifierName;
+    
+    if(isIgnoreFunctionName(name))
+        return;
+
     SymbolTableEntry *Entry = lookupSymbol(symbolTable, name);
                                            
     if( !Entry ){
