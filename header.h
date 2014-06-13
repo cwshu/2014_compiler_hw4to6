@@ -8,16 +8,25 @@ struct GlobalResource {
     RegisterManager regManager;
     RegisterManager FPRegManager;
     int stackTop;
+    ConstStringSet* constStrings;
 };
 #define MAX_REG_NUM 8
-#define MAX_FP_REG_NUM 30
+#define MAX_FP_REG_NUM 19
 #define FIRST_RM_REG_NUM 16
-#define FIRST_RM_FP_REG_NUM 2
+#define FIRST_RM_FP_REG_NUM 13
+
 void GRinit(struct GlobalResource* GR){
     GR->labelCounter = 1;
     GR->stackTop = 36;
     RMinit(&(GR.regManager), MAX_REG_NUM, FIRST_RM_REG_NUM);
     RMinit(&(GR.FPregManager), MAX_FP_REG_NUM, FIRST_RM_FP_REG_NUM);
+    
+    GR->constStrings = malloc(sizeof(ConstStringSet));
+    initConstStringSet(GR->constStrings);
+}
+
+void GRfin(struct GlobalResource* GR){
+    free(GR->constStrings);
 }
 
 #define MAX_ARRAY_DIMENSION 10

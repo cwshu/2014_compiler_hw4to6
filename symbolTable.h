@@ -30,9 +30,11 @@ void openScope(SymbolTableTree* pThis, int phase);
 void closeScope(SymbolTableTree* pThis);
 void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
+SymbolTableEntry* lookupSymbolWithLevel(SymbolTableTree* pThis, char* name, int* pLevel);
     /* NULL if name doesn't exist 
      * else return Entry
      */
+
 SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
 
 /* SymbolTableNode and methods prototype */

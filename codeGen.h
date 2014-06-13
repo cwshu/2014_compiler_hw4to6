@@ -13,21 +13,21 @@ void genPrologue(FILE* targetFile, char* funcName);
 void genEpilogue(FILE* targetFile, char* funcName, int localVarSize);
 
 /*** Statement generation ***/
-void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* StmtListNode, char* funcName);
-void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* StmtNode,char* funcName);
+void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* stmtListNode, char* funcName);
+void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcName);
 
-void genBlock(FILE* targetFile, STT *symbolTable, AST_NODE* blockNode);
-void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable){
-void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable){
-// void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode);
-// void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
-void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode);
+void genBlock(FILE* targetFile, STT *symbolTable, AST_NODE* blockNode, char* funcName);
+void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable, char* funcName){
+void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable, char* funcName){
+// void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName);
+void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName);
+void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, char* funcName);
 
 void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentNode);
 void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* expressionNode);
 void genAssignExpr(FILE targetFile, STT* symbolTable, AST_NODE* exprNode);
     /* wrapper for AssignmentStmt and Expr*/
-void genFunctionCall(targetFile, symbolTable, exprNode);
+void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
 void genProcessFuncReturnValue(FILE* targetFile, STT* SymbolTable, AST_NODE* exprNode);
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
@@ -36,6 +36,7 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
 #define INT_RETURN_REG v0
 #define FLOAT_RETURN_REG f0
 
+/*** Data Resourse, RegisterManager Implementation ***/
 typedef struct RegisterManager RegisterManager;
 
 struct RegisterManager {
@@ -58,6 +59,40 @@ void releaseReg(RegisterManager* pThis, int regNum);
 void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile);
 int findEmptyReg(RegisterManager* pThis);
 int findEarlestUsedReg(RegisterManager* pThis);
+
+/*** Constant String Implementation ***/
+#define MAX_CON_STRING 2048
+
+typedef struct ConstStringSet ConstStringSet;
+typedef struct ConstStringPair ConstStringPair;
+
+struct ConstStringSet{
+    int numOfConstString;
+    ConstStringSet constStrings[MAX_CON_STRING];
+};
+
+struct ConstStringPair{
+    int labelNum;
+    char* string;
+};
+
+void initConstStringSet(ConstStringSet* pThis){
+    pThis->numOfConstString = 0;
+}
+
+void addConstString(ConstStringSet* pThis, int labelNum, char* string){
+    pThis->constStrings[pThis->numOfConstString].labelNum = labelNum;
+    pThis->constStrings[pThis->numOfConstString].string = string;
+    pThis->numOfConstString++;
+}
+
+void genConstStrings(ConstStringSet* pThis, FILE* targetFile){
+    int i;
+    for(i=0; i<pThis->numOfConstString; i++){
+        ConstStringPair* pair = pThis->constStrings[i];
+        fprintf(targetFile, "L%d: .asciiz %s\n", pair->labelNum, pair->string);
+    }
+}
 
 /*** MIPS instruction generation ***/
 void genIntUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum);

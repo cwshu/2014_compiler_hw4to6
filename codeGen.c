@@ -11,8 +11,7 @@ void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
     AST_NODE* child = prog->child;
     while(child){
         if(child->nodeType == VARIABLE_DECL_LIST_NODE)
-            // pass
-            // processVariableDeclList(symbolTable, child);
+            genVariableDeclList(targetFile, symbolTable, child);
         else if(child->nodeType == DECLARATION_NODE)
             genFuncDecl(targetFile, symbolTable, child);
         child = child->rightSibling;
@@ -43,7 +42,7 @@ void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableD
 
 void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode, 
   int kind){
-    /* kind: VARIABLE_DECL
+    /* kind: GLOBAL or LOCAL variable
      * Notice: it can more than one variable declaration, like int a, b, c;
      */
     /* no initial value now */
@@ -212,35 +211,35 @@ _end_{funcName}:
  */
 
 /*** statement generation ***/
-void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* StmtListNode){
+void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* stmtListNode, char* funcName){
     
-    AST_NODE* child = StmtListNode->child;
+    AST_NODE* child = stmtListNode->child;
 
     while( child ){
-        genStmt(targetFile, symbolTable, child);
+        genStmt(targetFile, symbolTable, child, funcName);
         child = child -> rightSibling;
     }
 }
 
-void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* StmtNode){
+void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcName){
     
-    if( StmtNode->nodeType == BLOCK_NODE )
-        genBlock(targetFile, symbolTable, StmtNode);
-    else if( StmtNode->nodeType == STMT_NODE ){
+    if( stmtNode->nodeType == BLOCK_NODE )
+        genBlock(targetFile, symbolTable, stmtNode, funcName);
+    else if( stmtNode->nodeType == STMT_NODE ){
         
-        STMT_KIND stmtKind = StmtNode->semantic_value.stmtSemanticValue.kind;
+        STMT_KIND stmtKind = stmtNode->semantic_value.stmtSemanticValue.kind;
         switch( stmtKind ){
-            case WHILE_STMT: genWhileStmt(targetFile, symbolTable, StmtNode); break;
+            case WHILE_STMT: genWhileStmt(targetFile, symbolTable, stmtNode, funcName); break;
             case FOR_STMT: assert(0); break;
-            case IF_STMT: genIfStmt(targetFile, symbolTable, StmtNode) break;
-            case ASSIGN_STMT: genAssignmentStmt(targetFile, symbolTable, StmtNode); break;
-            case FUNCTION_CALL_STMT: genFuncCallStmt(targetFile, symbolTable, StmtNode); break;
-            case RETURN_STMT: genReturnStmt(targetFile, symbolTable, StmtNode, funcName); break;
+            case IF_STMT: genIfStmt(targetFile, symbolTable, stmtNode, funcName) break;
+            case ASSIGN_STMT: genAssignmentStmt(targetFile, symbolTable, stmtNode, funcName); break;
+            case FUNCTION_CALL_STMT: genFuncCallStmt(targetFile, symbolTable, stmtNode, funcName); break;
+            case RETURN_STMT: genReturnStmt(targetFile, symbolTable, stmtNode, funcName); break;
         }
     }
 }
 
-void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode){
+void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode, funcName){
     openScope(symbolTable, USE);
 
     AST_NODE* blockChild = blockNode->child;
@@ -304,6 +303,18 @@ void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable){
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
+void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName){
+    char* callingFuncName = exprNode->child->semantic_value.identifierSemanticValue.identifierName;
+    if(strncmp(callingFuncName, "read", 4) == 0)
+        assert(0);
+    else if(strncmp(callingFuncName, "fread", 5) == 0)
+        assert(0);
+    else if(strncmp(callingFuncName, "write", 5) == 0)
+        assert(0);
+    else
+        genFuncCall(targetFile, symbolTable, exprNode);
+}
+
 // return stmt
 void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, char* funcName){
     
@@ -331,12 +342,12 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     /* code generation for assignment node */
     /* lvalue */
     char *lvalueName = assignmentNode->child->semantic_value.identifierSemanticValue.identifierName;
+    int lvalueLevel;
+    SymbolTableEntry *lvalueEntry = lookupSymbolWithLevel(symbolTable, lvalueName, &lvalueLevel);
     int lvalueScope = LOCAL;
-    SymbolTableEntry *lvalueEntry = lookupSymbolCurrentScope(symbolTable, lvalueName);
-    if(!entry){
+    if(lvalueLevel == 0)
         lvalueScope = GLOBAL;
-        lvalueEntry = lookupSymbol(symbolTable, lvalueName);
-    }
+
     DATA_TYPE lvalueType = entry->type->primitiveType;
     /* rvalue */
     AST_NODE* rvalueNode = assignmentNode->child->rightSibling;
@@ -405,12 +416,11 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
         char* name = exprNode->semantic_value.identifierSemanticValue->identifierName;
-        int scope = LOCAL;
-        SymbolTableEntry* entry = lookupSymbolCurrentScope(symbolTable, name);
-        if(!entry){
+        int level, scope = LOCAL;
+        SymbolTableEntry* entry = lookupSymbolWithLevel(symbolTable, name, &level);
+        if(level == 0)
             scope = GLOBAL;
-            entry = lookupSymbol(symbolTable, name);
-        }
+
         DATA_TYPE type = entry->type->primitiveType;
 
         if(scope == LOCAL){
@@ -499,7 +509,7 @@ void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     /* codegen for jumping to the function(label)
      * HW6 Extension: with Parameter function call */
-     char *funcName = funcCallNode->child->IdentifierSemanticValue.identifierName;
+     char *funcName = funcCallNode->child->identifierSemanticValue.identifierName;
      fprintf(targetFile, "j %s\n",funcName);
 }
 
