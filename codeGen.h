@@ -16,7 +16,7 @@ void genEpilogue(FILE* targetFile, char* funcName, int localVarSize);
 void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* StmtListNode, char* funcName);
 void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* StmtNode,char* funcName);
 
-// void genBlock(FILE* targetFile, STT *symbolTable, AST_NODE* blockNode);
+void genBlock(FILE* targetFile, STT *symbolTable, AST_NODE* blockNode);
 void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable){
 void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable){
 // void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode);

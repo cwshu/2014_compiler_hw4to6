@@ -20,7 +20,7 @@ void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
 }
 
 /*** variable declaration ***/
-void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode, int* pLocalVarSize){
+void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode){
     /* codegen Declaration List */
     AST_NODE* child = variableDeclListNode->child;
 
@@ -33,7 +33,7 @@ void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableD
     }
 
     while(child){
-        genVariableDecl(targetFile, symbolTable, child, kind, pLocalVarSize);
+        genVariableDecl(targetFile, symbolTable, child, kind);
         child = child->rightSibling; 
     }
 
@@ -42,7 +42,7 @@ void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableD
 }
 
 void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode, 
-  int kind, int* pLocalVarSizeNow){
+  int kind){
     /* kind: VARIABLE_DECL
      * Notice: it can more than one variable declaration, like int a, b, c;
      */
@@ -72,8 +72,8 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
                 fprintf(targetFile, "%s: .float", entry->name);
         }
         else if(kind == LOCAL){
-            entry->stackOffset = *pLocalVarSizeNow + 4;    
-            *pLocalVarSizeNow += entry->stackOffset;
+            entry->stackOffset = GR.stackTop + 4;
+            GR.stackTop += 4;
         }
 
         variableNode = variableNode->rightSibling;
@@ -104,14 +104,12 @@ void genFuncDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     genPrologue(targetFile, funcName);
 
     AST_NODE* blockChild = blockNode->child;
-    int localVarSize = 0;
+
     while(blockChild){
         if(blockChild->nodeType == VARIABLE_DECL_LIST_NODE)
-            genVariableDeclList(targetFile, symbolTable, blockChild, &localVarSize);
-        if(blockChild->nodeType == STMT_LIST_NODE){
-            GR.stackTop += localVarSize;
+            genVariableDeclList(targetFile, symbolTable, blockChild);
+        if(blockChild->nodeType == STMT_LIST_NODE)
             genStmtList(targetFile, symbolTable, blockChild, funcName);
-        }
         blockChild = blockChild->rightSibling;
     }
 
@@ -214,8 +212,49 @@ _end_{funcName}:
  */
 
 /*** statement generation ***/
-int genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* StmtListNode, char* funcName);
-int genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* StmtNode,char* funcName);
+void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* StmtListNode){
+    
+    AST_NODE* child = StmtListNode->child;
+
+    while( child ){
+        genStmt(targetFile, symbolTable, child);
+        child = child -> rightSibling;
+    }
+}
+
+void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* StmtNode){
+    
+    if( StmtNode->nodeType == BLOCK_NODE )
+        genBlock(targetFile, symbolTable, StmtNode);
+    else if( StmtNode->nodeType == STMT_NODE ){
+        
+        STMT_KIND stmtKind = StmtNode->semantic_value.stmtSemanticValue.kind;
+        switch( stmtKind ){
+            case WHILE_STMT: genWhileStmt(targetFile, symbolTable, StmtNode); break;
+            case FOR_STMT: assert(0); break;
+            case IF_STMT: genIfStmt(targetFile, symbolTable, StmtNode) break;
+            case ASSIGN_STMT: genAssignmentStmt(targetFile, symbolTable, StmtNode); break;
+            case FUNCTION_CALL_STMT: genFuncCallStmt(targetFile, symbolTable, StmtNode); break;
+            case RETURN_STMT: genReturnStmt(targetFile, symbolTable, StmtNode, funcName); break;
+        }
+    }
+}
+
+void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode){
+    openScope(symbolTable, USE);
+
+    AST_NODE* blockChild = blockNode->child;
+    while(blockChild){
+        if(blockChild->nodeType == VARIABLE_DECL_LIST_NODE)
+            genVariableDeclList(targetFile, symbolTable, blockChild);
+        if(blockChild->nodeType == STMT_LIST_NODE)
+            genStmtList(targetFile, symbolTable, blockChild, funcName);
+        blockChild = blockChild->rightSibling;
+    }
+
+    GR.stackTop = 36;
+    closeScope(symbolTable);
+}
 
 void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable){
     
@@ -361,7 +400,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         }    
     }
     else if( exprNode->semantic_value.stmtSemanticValue.kind == FUNCTION_CALL_STMT ){
-        genFunctionCall(targetFile, symbolTable, exprNode);
+        genFuncCall(targetFile, symbolTable, exprNode);
         genProcessFuncReturnValue(targetFile, symbolTable, exprNode);
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
@@ -447,9 +486,17 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     }
 }
 
-void genAssignExpr(FILE targetFile, STT* symbolTable, AST_NODE* exprNode);
+void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
+    /* test, assign_expr(grammar): checkAssignmentStmt or checkExpr */
+    if(exprNode->nodeType == STMT_NODE){
+        if(exprNode->semantic_value.stmtSemanticValue.kind == ASSIGN_STMT)
+            genAssignmentStmt(targetFile, symbolTable, exprNode);
+    }
+    else 
+        genExpr(targetFile, symbolTable, exprNode);
+}
 
-void genFunctionCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
+void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     /* codegen for jumping to the function(label)
      * HW6 Extension: with Parameter function call */
      char *funcName = funcCallNode->child->IdentifierSemanticValue.identifierName;
@@ -482,6 +529,45 @@ void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exp
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
     /* return register or FP register of expression value.
      * For value in memory, load it to register */
+    if(exprNode->place.kind == REG_TYPE){
+        return exprNode->place.regNum;
+    }
+    else if(exprNode->valPlace.kind == STACK_TYPE){
+        int stackOffset = exprNode->valPlace.place.stackOffset;
+        if(exprNode->place.dataType == INT_TYPE){
+            int regNum = getReg(&GR.regManager, targetFile);
+            fprintf("lw $r%d, %s($fp)\n", regNum, stackOffset);
+            useReg(&GR.regManager, exprNode, regNum);
+            setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
+            return regNum;
+        }
+        else if(exprNode->place.dataType == FLOAT_TYPE){
+            int regNum = getReg(&GR.FPRegManager, targetFile);
+            fprintf("lw $r%d, %s($fp)\n", regNum, stackOffset);
+            useReg(&GR.FPRegManager, exprNode, regNum);
+            setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
+            return regNum;
+        }
+    }
+    else if(exprNode->valPlace.kind == LABEL_TYPE){
+        char* label = exprNode->valPlace.place.label;
+        if(exprNode->place.dataType == INT_TYPE){
+            int regNum = getReg(&GR.regManager, targetFile);
+            fprintf("lw $r%d, %s\n", regNum, label);
+            useReg(&GR.regManager, exprNode, regNum);
+            setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
+            return regNum;
+        }
+        else if(exprNode->place.dataType == FLOAT_TYPE){
+            int regNum = getReg(&GR.FPRegManager, targetFile);
+            fprintf("lw $r%d, %s\n", regNum, label);
+            useReg(&GR.FPRegManager, exprNode, regNum);
+            setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
+            return regNum;
+        }
+    }
+
+    return -1;
 }
 
 /*** Data Resourse, RegisterManager Implementation ***/
@@ -796,4 +882,3 @@ void genIntToFloat(FILE* targetFile, int destRegNum, int intRegNum){
     fprintf(targetFile, "mtc1 $r%d, $f%d\n", intRegNum, destRegNum);
     fprintf(targetFile, "cvt.s.w $f%d, $f%d\n", destRegNum, destRegNum);
 }
-
