@@ -306,11 +306,11 @@ void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable){
 void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName){
     char* callingFuncName = exprNode->child->semantic_value.identifierSemanticValue.identifierName;
     if(strncmp(callingFuncName, "read", 4) == 0)
-        assert(0);
+        genRead(targetFile);
     else if(strncmp(callingFuncName, "fread", 5) == 0)
-        assert(0);
+        genFRead(targetFile);
     else if(strncmp(callingFuncName, "write", 5) == 0)
-        assert(0);
+        genWrite(targetFile);
     else
         genFuncCall(targetFile, symbolTable, exprNode);
 }
@@ -396,7 +396,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         if( exprNode->semantic_value.const1->const_type == INTEGERC){
             int value = exprNode->semantic_value.const1->const_u.intval;
             int intRegNum = getReg(&GR.regManager, targetFile);
-            fprintf(targetFile, "li $r%d, %d", intRegNum, value);
+            fprintf(targetFile, "li $r%d, %d\n", intRegNum, value);
 
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
             useReg(&GR.regManager, intRegNum, exprNode);
@@ -404,15 +404,28 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         else if ( exprNode->semantic_value.const1->const_type == FLOATC ){
             float value = exprNode->semantic_value.const1->const_u.fval;
             int floatRegNum = getReg(&GR.FPRegManager, targetFile);
-            fprintf(targetFile, "li.s $f%d, %d", floatRegNum, value);
+            fprintf(targetFile, "li.s $f%d, %d\n", floatRegNum, value);
 
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
             useReg(&GR.FPRegManager, floatRegNum, exprNode);
         }    
     }
     else if( exprNode->semantic_value.stmtSemanticValue.kind == FUNCTION_CALL_STMT ){
-        genFuncCall(targetFile, symbolTable, exprNode);
-        genProcessFuncReturnValue(targetFile, symbolTable, exprNode);
+        char* callingFuncName = exprNode->child->semantic_value.identifierSemanticValue.identifierName;
+        if(strncmp(callingFuncName, "read", 4) == 0){
+            genRead(targetFile);
+            genProcessIntReturnValue(targetFile, exprNode);
+        }
+        else if(strncmp(callingFuncName, "fread", 5) == 0){
+            genFRead(targetFile);
+            genProcessFloatReturnValue(targetFile, exprNode);
+        }
+        else if(strncmp(callingFuncName, "write", 5) == 0)
+            genWrite(targetFile);
+        else{
+            genFuncCall(targetFile, symbolTable, exprNode);
+            genProcessFuncReturnValue(targetFile, symbolTable, exprNode);
+        }
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
         char* name = exprNode->semantic_value.identifierSemanticValue->identifierName;
@@ -520,20 +533,26 @@ void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exp
     SymbolTableEntry* funcEntry = lookupSymbol(symbolTable, funcName);
     DATA_TYPE returnType = funcEntry->type->primitiveType;
 
-    if(returnType == INT_TYPE){
-        int intRegNum = getReg(&GR.regManager, targetFile);
-        fprintf(targetFile, "add $r%d, $%s, $r0\n", intRegNum, INT_RETURN_REG); /* equal to move */
+    if(returnType == INT_TYPE)
+        genProcessIntReturnValue(targetFile, exprNode);
+    else if(returnType == FLOAT_TYPE)
+        genProcessFloatReturnValue(targetFile, exprNode);
+}
 
-        setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
-        useReg(&GR.regManager, intRegNum)
-    }
-    else if(returnType == FLOAT_TYPE){
-        int floatRegNum = getReg(&GR.FPRegManager, targetFile);
-        fprintf(targetFile, "mov.s $f%d, $%s\n", floatRegNum, FLOAT_RETURN_REG);
+void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode){
+    int intRegNum = getReg(&GR.regManager, targetFile);
+    fprintf(targetFile, "add $r%d, $%s, $r0\n", intRegNum, INT_RETURN_REG); /* equal to move */
 
-        setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
-        useReg(&GR.FPRegManager, floatRegNum);
-    }
+    setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
+    useReg(&GR.regManager, intRegNum);
+}
+
+void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode){
+    int floatRegNum = getReg(&GR.FPRegManager, targetFile);
+    fprintf(targetFile, "mov.s $f%d, $%s\n", floatRegNum, FLOAT_RETURN_REG);
+
+    setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
+    useReg(&GR.FPRegManager, floatRegNum);
 }
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
@@ -891,4 +910,53 @@ void genFloatToInt(FILE* targetFile, int destRegNum, int floatRegNum){
 void genIntToFloat(FILE* targetFile, int destRegNum, int intRegNum){
     fprintf(targetFile, "mtc1 $r%d, $f%d\n", intRegNum, destRegNum);
     fprintf(targetFile, "cvt.s.w $f%d, $f%d\n", destRegNum, destRegNum);
+}
+
+/* IO system call */
+void genRead(FILE *targetFile){
+    
+    fprintf(targetFile, "li $v0 5\n");//syscall 5 means read_int;
+    fprintf(targetFile, "syscall\n"); //the returned result will be in $v0
+}
+
+void genFRead(FILE *targetFile){
+    
+    fprintf(targetFile, "li $v0 6\n");//syscall 6 means read_float;
+    fprintf(targetFile, "syscall\n"); //the returned result will be in $f0
+}
+
+
+void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode){
+    
+    // genExpr
+    AST_NODE* ExprNode = funcCallNode->child->rightSibling->child;
+    genExpr(targetFile, symbolTable, ExprNode);
+
+    // check type to be printed
+    if( ExprNode->dataType == CONST_STRING_TYPE ){
+        
+        char *constString = ExprNode->semantic_value.const1->const_u.sc;
+        int constStringLabel = GR.labelCounter++;
+        addConstString(GR->constStrings, constStringLabel, constStrings);
+        fprintf(targetFile, "li $v0, 4\n");
+        fprintf(targetFile, "la $a0 L%d\n", constStringLabel);
+        fprintf(targetFile, "syscall\n");
+    }
+    else{
+
+        DATA_TYPE dataType = getTypeOfExpr(symbolTable, ExprNode);
+
+        if(dataType == INT_TYPE){
+            int intRegNum = getExprNodeReg(targetFile, ExprNode);
+            fprintf(targetFile, "li $v0, 1\n");
+            fprintf(targetFile, "move $a0, $r%d\n", intRegNum);
+            fprintf(targetFile, "syscall\n");
+        }
+        else if(dataType == FLOAT_TYPE){
+            int floatRegNum = getExprNodeReg(targetFile, ExprNode);
+            fprintf(targetFile, "li $v0, 2\n");
+            fprintf(targetFile, "mov.s $f12, $f%d\n", floatRegNum);
+            fprintf(targetFile, "syscall\n");
+        }
+    }
 }

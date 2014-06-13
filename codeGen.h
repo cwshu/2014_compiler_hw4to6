@@ -1,6 +1,5 @@
 #ifndef __CODEGEN_H__
 #define __CODEGEN_H__
-void codeGen(AST_NODE* prog, STT* symbolTable);
 
 /*** Declarations ***/
 void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode, int* pLocalVarSize);
@@ -29,6 +28,8 @@ void genAssignExpr(FILE targetFile, STT* symbolTable, AST_NODE* exprNode);
     /* wrapper for AssignmentStmt and Expr*/
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
 void genProcessFuncReturnValue(FILE* targetFile, STT* SymbolTable, AST_NODE* exprNode);
+void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode);
+void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode);
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
 
@@ -138,4 +139,8 @@ void genFPNegOpInstr(FILE* targetFile, int distRegNum, int srcRegNum);
 /* casting */
 void genFloatToInt(FILE* targetFile, int destRegNum, int floatRegNum);
 void genIntToFloat(FILE* targetFile, int destRegNum, int intRegNum);
+/* IO system call */
+void genRead(FILE *targetFile);
+void genFRead(FILE *targetFile);
+void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode);
 #endif

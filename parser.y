@@ -767,22 +767,27 @@ dim_list	: dim_list MK_LB expr MK_RB
 %%
 
 #include "lex.yy.c"
-main (argc, argv)
-int argc;
-char *argv[];
-  {
-     yyin = fopen(argv[1],"r");
-     yyparse();
-     printGV(prog, NULL);
+int main(int argc, char *argv[]){
+    if(argc != 3){
+        print("Error arguments number\n");
+        print("[compiler] [input] [out]\n");
+        return;
+    }
 
-     // SymbolTableTree* symTable = createSymbolTableTree();
-     // semanticAnalysis(prog, symTable);
-     
-     if (!g_anyErrorOccur) {
-        printf("Parsing completed. No errors found.\n");
-     }
-  } /* main */
+    yyin = fopen(argv[1], "r");
+    yyparse();
+    printGV(prog, NULL);
 
+    SymbolTableTree* symTable = createSymbolTableTree();
+    semanticAnalysis(prog, symTable);
+
+    FILE* targetFile = fopen(argv[2], "w");
+    codeGen(targetFile, prog, symTable);
+    genConstStrings(GR->constStrings, targetFile);
+    GRfin(GR);
+
+    fclose(targetFile);
+} /* main */
 
 int yyerror (mesg)
 char *mesg;
