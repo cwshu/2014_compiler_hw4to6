@@ -1,12 +1,24 @@
 #ifndef __HEADER_H__
 #define __HEADER_H__
 
-#include "AST_place.h"
+#include <stdio.h>
 
+typedef struct GlobalResource GlobalResource;
+
+typedef enum ExpValPlaceKind ExpValPlaceKind;
+typedef struct ExpValPlace ExpValPlace;
+
+typedef struct AST_NODE AST_NODE;
+/* other files */
+typedef struct SymbolTableTree SymbolTableTree, STT;
+typedef struct RegisterManager RegisterManager;
+typedef struct ConstStringSet ConstStringSet;
+
+/*** GlobalResource ***/
 struct GlobalResource {
     int labelCounter;
-    RegisterManager regManager;
-    RegisterManager FPRegManager;
+    RegisterManager* regManager;
+    RegisterManager* FPRegManager;
     int stackTop;
     ConstStringSet* constStrings;
 };
@@ -18,10 +30,8 @@ struct GlobalResource {
 void GRinit(struct GlobalResource* GR);
 void GRfin(struct GlobalResource* GR);
 
-
 #define MAX_ARRAY_DIMENSION 10
-
-typedef struct SymbolTableTree SymbolTableTree, STT;
+/*** AST_NODE declaration ***/
 
 typedef enum DATA_TYPE
 {
@@ -148,7 +158,6 @@ struct SymbolAttribute;
 typedef struct IdentifierSemanticValue
 {
     char *identifierName;
-    struct SymbolTableEntry *symbolTableEntry;
     IDENTIFIER_KIND kind;
 } IdentifierSemanticValue;
 
@@ -167,7 +176,29 @@ typedef struct CON_Type{
     } const_u;
 } CON_Type;
 
+/*** AST place ***/
+typedef enum ExpValPlaceKind{
+    NULL_TYPE,
+    REG_TYPE,
+    STACK_TYPE,
+    LABEL_TYPE
+} ExpValPlaceKind;
 
+struct ExpValPlace{
+    DATA_TYPE dataType;
+    ExpValPlaceKind kind;
+    union {
+        int regNum;
+        int stackOffset;
+        char* label;
+    } place;
+};
+
+void setPlaceOfASTNodeToReg(AST_NODE *pThis, DATA_TYPE primiType, int regNum);
+void setPlaceOfASTNodeToStack(AST_NODE *pThis, DATA_TYPE primiType, int stackOffset);
+void setPlaceOfASTNodeToLabel(AST_NODE *pThis, DATA_TYPE primiType, char* label);
+
+/*** AST_NODE ***/
 struct AST_NODE {
 	struct AST_NODE *child;
 	struct AST_NODE *parent;
@@ -185,8 +216,8 @@ struct AST_NODE {
 	} semantic_value;
     struct ExpValPlace valPlace;
 };
-typedef struct AST_NODE AST_NODE;
 
+/*** other files ***/
 AST_NODE *Allocate(AST_TYPE type);
 void semanticAnalysis(AST_NODE *prog, STT* symbolTable);
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable);

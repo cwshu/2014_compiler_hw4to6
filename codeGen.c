@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <assert.h>
 #include "codeGen.h"
-#include "semanticAnalysis.h"
 #include "header.h"
+#include "symbolTable.h"
+#include "semanticAnalysis.h"
 
 #define GLOBAL 1
 #define LOCAL 2
+extern GlobalResource GR;
 
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
     AST_NODE* child = prog->child;
@@ -37,7 +39,7 @@ void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableD
     }
 
     if(kind == GLOBAL)
-        return 0;
+        return;
 }
 
 void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode, 
@@ -48,27 +50,28 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
     /* no initial value now */
     DECL_KIND declKind = declarationNode->semantic_value.declSemanticValue.kind;
     if(declKind != VARIABLE_DECL)
-        return 0;
+        return;
 
     AST_NODE* variableNode = declarationNode->child->rightSibling;
 
     while(variableNode){
-        char* varName = variableNode->semantic_value.identifierSemanticValue->identifierName;
+        char* varName = variableNode->semantic_value.identifierSemanticValue.identifierName;
         SymbolTableEntry* entry = lookupSymbol(symbolTable, varName);
         TypeDescriptor* type = entry->type;
 
         int varSize = 4; // int and float
-        for(int i=0; i<type->dimension; i++){
+        int i;
+        for(i=0; i<type->dimension; i++){
             varSize *= type->sizeOfEachDimension[i]; 
         }
 
         if(kind == GLOBAL){
             if(type->dimension != 0)
-                fprintf(targetFile, "%s: .space %d", entry->name, varSize);
+                fprintf(targetFile, "%s: .space %d\n", entry->name, varSize);
             else if(type->primitiveType == INT_TYPE)
-                fprintf(targetFile, "%s: .word", entry->name);
+                fprintf(targetFile, "%s: .word\n", entry->name);
             else if(type->primitiveType == FLOAT_TYPE)
-                fprintf(targetFile, "%s: .float", entry->name);
+                fprintf(targetFile, "%s: .float\n", entry->name);
         }
         else if(kind == LOCAL){
             entry->stackOffset = GR.stackTop + 4;
@@ -144,25 +147,25 @@ void genPrologue(FILE* targetFile, char* funcName){
 
 void genEpilogue(FILE* targetFile, char* funcName, int localVarSize){
     int frameSize = 36 + localVarSize;
-    fprintf("# epilogue\n"               );
-    fprintf("_end_%s:\n"                 , funcName);
-    fprintf("    # Load Saved register\n");
-    fprintf("    lw  $s0, 36($sp)\n"     );
-    fprintf("    lw  $s1, 32($sp)\n"     );
-    fprintf("    lw  $s2, 28($sp)\n"     );
-    fprintf("    lw  $s3, 24($sp)\n"     );
-    fprintf("    lw  $s4, 20($sp)\n"     );
-    fprintf("    lw  $s5, 16($sp)\n"     );
-    fprintf("    lw  $s6, 12($sp)\n"     );
-    fprintf("    lw  $s7, 8($sp)\n"      );
-    fprintf("    lw  $gp, 4($sp)\n"      );
-    fprintf("\n"                         );
-    fprintf("    lw  $ra, 4($fp)\n"      );
-    fprintf("    add $sp, $fp, 4\n"      );
-    fprintf("    lw  $fp, 0($fp)\n"      );
-    fprintf("    jr  $ra\n"              );
-    fprintf(".data\n"                    );
-    fprintf("    _framesize_%s: .word %d\n", funcName, frameSize);
+    fprintf(targetFile, "# epilogue\n"               );
+    fprintf(targetFile, "_end_%s:\n"                 , funcName);
+    fprintf(targetFile, "    # Load Saved register\n");
+    fprintf(targetFile, "    lw  $s0, 36($sp)\n"     );
+    fprintf(targetFile, "    lw  $s1, 32($sp)\n"     );
+    fprintf(targetFile, "    lw  $s2, 28($sp)\n"     );
+    fprintf(targetFile, "    lw  $s3, 24($sp)\n"     );
+    fprintf(targetFile, "    lw  $s4, 20($sp)\n"     );
+    fprintf(targetFile, "    lw  $s5, 16($sp)\n"     );
+    fprintf(targetFile, "    lw  $s6, 12($sp)\n"     );
+    fprintf(targetFile, "    lw  $s7, 8($sp)\n"      );
+    fprintf(targetFile, "    lw  $gp, 4($sp)\n"      );
+    fprintf(targetFile, "\n"                         );
+    fprintf(targetFile, "    lw  $ra, 4($fp)\n"      );
+    fprintf(targetFile, "    add $sp, $fp, 4\n"      );
+    fprintf(targetFile, "    lw  $fp, 0($fp)\n"      );
+    fprintf(targetFile, "    jr  $ra\n"              );
+    fprintf(targetFile, ".data\n"                    );
+    fprintf(targetFile, "    _framesize_%s: .word %d\n", funcName, frameSize);
 }
 
 /*
@@ -231,15 +234,15 @@ void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcN
         switch( stmtKind ){
             case WHILE_STMT: genWhileStmt(targetFile, symbolTable, stmtNode, funcName); break;
             case FOR_STMT: assert(0); break;
-            case IF_STMT: genIfStmt(targetFile, symbolTable, stmtNode, funcName) break;
-            case ASSIGN_STMT: genAssignmentStmt(targetFile, symbolTable, stmtNode, funcName); break;
+            case IF_STMT: genIfStmt(targetFile, symbolTable, stmtNode, funcName); break;
+            case ASSIGN_STMT: genAssignmentStmt(targetFile, symbolTable, stmtNode); break;
             case FUNCTION_CALL_STMT: genFuncCallStmt(targetFile, symbolTable, stmtNode, funcName); break;
             case RETURN_STMT: genReturnStmt(targetFile, symbolTable, stmtNode, funcName); break;
         }
     }
 }
 
-void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode, funcName){
+void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode, char* funcName){
     openScope(symbolTable, USE);
 
     AST_NODE* blockChild = blockNode->child;
@@ -255,10 +258,10 @@ void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode, funcName)
     closeScope(symbolTable);
 }
 
-void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable){
+void genIfStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName){
     
     // condition
-    genAssignExpr(ifStmtNode->child);
+    genAssignExpr(targetFile, symbolTable, ifStmtNode->child);
     
     // jump to else if condition not match
     int elseLabel = GR.labelCounter++;
@@ -266,21 +269,21 @@ void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable){
     fprintf(targetFile, "beqz $r%d L%d\n", ifStmtNode->child->valPlace.place.regNum, elseLabel);
     
     // then block
-    genStmt(ifStmtNode->child->rightSibling);
+    genStmt(targetFile, symbolTable, ifStmtNode->child->rightSibling, funcName);
     
     // jump over else
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", elseLabel);
 
     // else block
-    if( ifStmtNode->child->rightSibling->rightSibling->AST_TYPE != NUL_NODE )
-        genStmt(ifStmtNode->child->rightSibling->rightSibling);
+    if( ifStmtNode->child->rightSibling->rightSibling->nodeType != NUL_NODE )
+        genStmt(targetFile, symbolTable, ifStmtNode->child->rightSibling->rightSibling, funcName);
 
     // exit
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable){
+void genWhileStmt(FILE* targetFile, STT* symbolTable, AST_NODE* whileStmtNode, char* funcName){
     
     // Test Label
     int testLabel = GR.labelCounter++;
@@ -288,13 +291,13 @@ void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable){
     fprintf(targetFile, "L%d:\n", testLabel);
     
     // condition
-    genAssignExpr(whileStmtNode->child);
+    genAssignExpr(targetFile, symbolTable, whileStmtNode->child);
     
     // check condition
     fprintf(targetFile, "beqz $r%d L%d\n", whileStmtNode->child->valPlace.place.regNum, exitLabel);
     
     // Stmt
-    genStmt(whileStmtNode->child->rightSibling);
+    genStmt(targetFile, symbolTable, whileStmtNode->child->rightSibling, funcName);
 
     // loop back
     fprintf(targetFile, "j L%d\n", testLabel);
@@ -310,7 +313,7 @@ void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, cha
     else if(strncmp(callingFuncName, "fread", 5) == 0)
         genFRead(targetFile);
     else if(strncmp(callingFuncName, "write", 5) == 0)
-        genWrite(targetFile);
+        genWrite(targetFile, symbolTable, exprNode);
     else
         genFuncCall(targetFile, symbolTable, exprNode);
 }
@@ -325,14 +328,14 @@ void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, cha
     DATA_TYPE returnType = funcEntry->type->primitiveType;
 
     if(returnType == INT_TYPE){
-        int retRegNum = getExprNodeReg(returnNode->child);
+        int retRegNum = getExprNodeReg(targetFile, returnNode->child);
         fprinf(targetFile, "move $r%d, $r%d\n", INT_RETURN_REG, retRegNum);
-        releaseReg(&GR.regManager, retRegNum);
+        releaseReg(GR.regManager, retRegNum);
     }
     else if(returnType == FLOAT_TYPE){
-        int retRegNum = getExprNodeReg(returnNode->child);
+        int retRegNum = getExprNodeReg(targetFile, returnNode->child);
         fprinf(targetFile, "mov.s $f%d, $f%d\n", FLOAT_RETURN_REG, retRegNum);
-        releaseReg(&GR.FPRegManager, retRegNum);
+        releaseReg(GR.FPRegManager, retRegNum);
     }
 
     fprintf(targetFile, "j _end_%s\n", funcName);
@@ -348,30 +351,30 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     if(lvalueLevel == 0)
         lvalueScope = GLOBAL;
 
-    DATA_TYPE lvalueType = entry->type->primitiveType;
+    DATA_TYPE lvalueType = lvalueEntry->type->primitiveType;
     /* rvalue */
     AST_NODE* rvalueNode = assignmentNode->child->rightSibling;
     genExpr(targetFile, symbolTable, rvalueNode); // 0 means not function parameter
     DATA_TYPE rvalueType = getTypeOfExpr(symbolTable, rvalueNode);
-    int rvalueRegNum = getExprNodeReg(rvalueNode);
+    int rvalueRegNum = getExprNodeReg(targetFile, rvalueNode);
     /* type conversion */
     if(lvalueType == INT_TYPE && rvalueType == FLOAT_TYPE){
-        int intRegNum = getReg(&(GR.regManager));
+        int intRegNum = getReg(GR.regManager, targetFile);
         genFloatToInt(targetFile, intRegNum, rvalueRegNum);
-        releaseReg(&(GR.FPRegManager), rvalueRegNum);
+        releaseReg(GR.FPRegManager, rvalueRegNum);
         rvalueRegNum = intRegNum;
 
         setPlaceOfASTNodeToReg(rvalueNode, INT_TYPE, intRegNum);
-        useReg(GR.regManager, rvalueNode, intRegNum);
+        useReg(GR.regManager, intRegNum, rvalueNode);
     }
     else if(lvalueType == FLOAT_TYPE && rvalueType == INT_TYPE){
-        int floatRegNum = getReg(&GR.FPRegManager);
+        int floatRegNum = getReg(GR.FPRegManager, targetFile);
         genIntToFloat(targetFile, floatRegNum, rvalueRegNum);
-        releaseReg(&GR.regManager, rvalueRegNum);
+        releaseReg(GR.regManager, rvalueRegNum);
         rvalueRegNum = floatRegNum;
 
         setPlaceOfASTNodeToReg(rvalueNode, FLOAT_TYPE, floatRegNum);
-        useReg(GR.FPRegManager, rvalueNode, floatRegNum);
+        useReg(GR.FPRegManager, floatRegNum, rvalueNode);
     }
     /* assignment */
     if(lvalueType == INT_TYPE){
@@ -379,7 +382,7 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
             fprintf(targetFile, "sw $r%d, %d($fp)\n", rvalueRegNum, lvalueEntry->stackOffset);
         else if(lvalueScope == GLOBAL)
             fprintf(targetFile, "sw $r%d, %s\n", rvalueRegNum, lvalueEntry->name);
-        releaseReg(rvalueRegNum);
+        releaseReg(GR.regManager, rvalueRegNum);
     }
     if(lvalueType == FLOAT_TYPE){
         if(lvalueScope == LOCAL)
@@ -395,19 +398,19 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     if( exprNode->nodeType == CONST_VALUE_NODE ){
         if( exprNode->semantic_value.const1->const_type == INTEGERC){
             int value = exprNode->semantic_value.const1->const_u.intval;
-            int intRegNum = getReg(&GR.regManager, targetFile);
+            int intRegNum = getReg(GR.regManager, targetFile);
             fprintf(targetFile, "li $r%d, %d\n", intRegNum, value);
 
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
-            useReg(&GR.regManager, intRegNum, exprNode);
+            useReg(GR.regManager, intRegNum, exprNode);
         }
         else if ( exprNode->semantic_value.const1->const_type == FLOATC ){
             float value = exprNode->semantic_value.const1->const_u.fval;
-            int floatRegNum = getReg(&GR.FPRegManager, targetFile);
-            fprintf(targetFile, "li.s $f%d, %d\n", floatRegNum, value);
+            int floatRegNum = getReg(GR.FPRegManager, targetFile);
+            fprintf(targetFile, "li.s $f%d, %f\n", floatRegNum, value);
 
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
-            useReg(&GR.FPRegManager, floatRegNum, exprNode);
+            useReg(GR.FPRegManager, floatRegNum, exprNode);
         }    
     }
     else if( exprNode->semantic_value.stmtSemanticValue.kind == FUNCTION_CALL_STMT ){
@@ -421,14 +424,14 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             genProcessFloatReturnValue(targetFile, exprNode);
         }
         else if(strncmp(callingFuncName, "write", 5) == 0)
-            genWrite(targetFile);
+            genWrite(targetFile, symbolTable, exprNode);
         else{
             genFuncCall(targetFile, symbolTable, exprNode);
             genProcessFuncReturnValue(targetFile, symbolTable, exprNode);
         }
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
-        char* name = exprNode->semantic_value.identifierSemanticValue->identifierName;
+        char* name = exprNode->semantic_value.identifierSemanticValue.identifierName;
         int level, scope = LOCAL;
         SymbolTableEntry* entry = lookupSymbolWithLevel(symbolTable, name, &level);
         if(level == 0)
@@ -441,19 +444,17 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                 setPlaceOfASTNodeToStack(exprNode, INT_TYPE, entry->stackOffset);
             else if(type == FLOAT_TYPE)
                 setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, entry->stackOffset);
-            /* UNFINISH: write("hello world") */
         }
         if(scope == GLOBAL){
             if(type == INT_TYPE)
                 setPlaceOfASTNodeToLabel(exprNode, INT_TYPE, entry->name);
             else if(type == FLOAT_TYPE)
                 setPlaceOfASTNodeToLabel(exprNode, FLOAT_TYPE, entry->name);
-            /* UNFINISH: write("hello world") */
         }
     }
     else if( exprNode->nodeType == EXPR_NODE ){
         if( exprNode->semantic_value.exprSemanticValue.kind == UNARY_OPERATION ){
-            genExpr(exprNode->child);
+            genExpr(targetFile, symbolTable, exprNode->child);
             DATA_TYPE type = checkExpr(exprNode->child);
             int childRegNum = getExprNodeReg(targetFile, exprNode);
 
@@ -464,7 +465,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                 genIntUnaryOpInstr(targetFile, op, regNum, childRegNum);
 
                 setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
-                useReg(GR.regManager, exprNode, regNum);
+                useReg(GR.regManager, regNum, exprNode);
                 releaseReg(GR.regManager, childRegNum);
             }
             else if(type == FLOAT_TYPE){
@@ -473,13 +474,13 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                 genFloatUnaryOpInstr(targetFile, op, regNum, childRegNum);
 
                 setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
-                useReg(GR.FPRegManager, exprNode, regNum);
+                useReg(GR.FPRegManager, regNum, exprNode);
                 releaseReg(GR.FPRegManager, childRegNum);
             }
         }
         else if( exprNode->semantic_value.exprSemanticValue.kind == BINARY_OPERATION ){
-            genExpr(exprNode->child);
-            genExpr(exprNode->child->rightSibling);
+            genExpr(targetFile, symbolTable, exprNode->child);
+            genExpr(targetFile, symbolTable, exprNode->child->rightSibling);
             DATA_TYPE type = checkExpr(exprNode->child);
             int child1RegNum = getExprNodeReg(targetFile, exprNode);
             int child2RegNum = getExprNodeReg(targetFile, exprNode);
@@ -491,7 +492,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                 genIntBinaryOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
 
                 setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
-                useReg(GR.regManager, exprNode, regNum);
+                useReg(GR.regManager, regNum, exprNode);
                 releaseReg(GR.regManager, child1RegNum);
                 releaseReg(GR.regManager, child2RegNum);
             }
@@ -501,7 +502,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                 genFloatBinaryOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
 
                 setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
-                useReg(GR.FPRegManager, exprNode, regNum);
+                useReg(GR.FPRegManager, regNum, exprNode);
                 releaseReg(GR.FPRegManager, child1RegNum);
                 releaseReg(GR.FPRegManager, child2RegNum);
             }
@@ -522,14 +523,14 @@ void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     /* codegen for jumping to the function(label)
      * HW6 Extension: with Parameter function call */
-     char *funcName = funcCallNode->child->identifierSemanticValue.identifierName;
+     char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
      fprintf(targetFile, "j %s\n",funcName);
 }
 
 void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
-    /* after function call, process function return value, and store in exprNode->place */
+    /* after function call, process function return value, and store in exprNode->valPlace */
     AST_NODE* funcNameNode = exprNode->child;
-    char* funcName = funcNameNode->semantic_value.identifierSemanticValue->identifierName;
+    char* funcName = funcNameNode->semantic_value.identifierSemanticValue.identifierName;
     SymbolTableEntry* funcEntry = lookupSymbol(symbolTable, funcName);
     DATA_TYPE returnType = funcEntry->type->primitiveType;
 
@@ -540,57 +541,57 @@ void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exp
 }
 
 void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode){
-    int intRegNum = getReg(&GR.regManager, targetFile);
+    int intRegNum = getReg(GR.regManager, targetFile);
     fprintf(targetFile, "add $r%d, $%s, $r0\n", intRegNum, INT_RETURN_REG); /* equal to move */
 
     setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
-    useReg(&GR.regManager, intRegNum);
+    useReg(GR.regManager, intRegNum, exprNode);
 }
 
 void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode){
-    int floatRegNum = getReg(&GR.FPRegManager, targetFile);
+    int floatRegNum = getReg(GR.FPRegManager, targetFile);
     fprintf(targetFile, "mov.s $f%d, $%s\n", floatRegNum, FLOAT_RETURN_REG);
 
     setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
-    useReg(&GR.FPRegManager, floatRegNum);
+    useReg(GR.FPRegManager, floatRegNum, exprNode);
 }
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
     /* return register or FP register of expression value.
      * For value in memory, load it to register */
-    if(exprNode->place.kind == REG_TYPE){
-        return exprNode->place.regNum;
+    if(exprNode->valPlace.kind == REG_TYPE){
+        return exprNode->valPlace.place.regNum;
     }
     else if(exprNode->valPlace.kind == STACK_TYPE){
         int stackOffset = exprNode->valPlace.place.stackOffset;
-        if(exprNode->place.dataType == INT_TYPE){
-            int regNum = getReg(&GR.regManager, targetFile);
-            fprintf("lw $r%d, %s($fp)\n", regNum, stackOffset);
-            useReg(&GR.regManager, exprNode, regNum);
+        if(exprNode->valPlace.dataType == INT_TYPE){
+            int regNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $r%d, %d($fp)\n", regNum, stackOffset);
+            useReg(GR.regManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
             return regNum;
         }
-        else if(exprNode->place.dataType == FLOAT_TYPE){
-            int regNum = getReg(&GR.FPRegManager, targetFile);
-            fprintf("lw $r%d, %s($fp)\n", regNum, stackOffset);
-            useReg(&GR.FPRegManager, exprNode, regNum);
+        else if(exprNode->valPlace.dataType == FLOAT_TYPE){
+            int regNum = getReg(GR.FPRegManager, targetFile);
+            fprintf(targetFile, "lw $r%d, %d($fp)\n", regNum, stackOffset);
+            useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
         }
     }
     else if(exprNode->valPlace.kind == LABEL_TYPE){
         char* label = exprNode->valPlace.place.label;
-        if(exprNode->place.dataType == INT_TYPE){
-            int regNum = getReg(&GR.regManager, targetFile);
-            fprintf("lw $r%d, %s\n", regNum, label);
-            useReg(&GR.regManager, exprNode, regNum);
+        if(exprNode->valPlace.dataType == INT_TYPE){
+            int regNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $r%d, %s\n", regNum, label);
+            useReg(GR.regManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
             return regNum;
         }
-        else if(exprNode->place.dataType == FLOAT_TYPE){
-            int regNum = getReg(&GR.FPRegManager, targetFile);
-            fprintf("lw $r%d, %s\n", regNum, label);
-            useReg(&GR.FPRegManager, exprNode, regNum);
+        else if(exprNode->valPlace.dataType == FLOAT_TYPE){
+            int regNum = getReg(GR.FPRegManager, targetFile);
+            fprintf(targetFile, "lw $r%d, %s\n", regNum, label);
+            useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
         }
@@ -604,7 +605,8 @@ void RMinit(RegisterManager* pThis, int numOfReg, int firstRegNum){
     pThis->numOfReg = numOfReg;
     pThis->firstRegNum = firstRegNum;
 
-    for(int i=0; i<pThis->numOfReg; i++){
+    int i;
+    for(i=0; i<pThis->numOfReg; i++){
         pThis->regFull[i] = 0;
         pThis->regUser[i] = NULL;
     }
@@ -617,7 +619,7 @@ int getReg(RegisterManager* pThis, FILE* targetFile){
     /* find empty register first */
     int regIndex = findEmptyReg(pThis);
     if(regIndex != -1){
-        pThis->regFull[index] = 1;
+        pThis->regFull[regIndex] = 1;
         int regNum = regIndex + pThis->firstRegNum;
         return regNum;
     }
@@ -629,7 +631,7 @@ int getReg(RegisterManager* pThis, FILE* targetFile){
     return regNum;
 }
 
-int useReg(RegisterManager* pThis, int regNum, AST_NODE* nodeUseThisReg){
+void useReg(RegisterManager* pThis, int regNum, AST_NODE* nodeUseThisReg){
     /* AST_NODE use register, build link from register Manager to AST_NODE */
     int regIndex = regNum - pThis->firstRegNum;
     pThis->regUser[regIndex] = nodeUseThisReg;
@@ -667,20 +669,39 @@ int findEarlestUsedReg(RegisterManager* pThis){
 
 void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
     /* spill value of register to the runtime stack, then release this register */
+    int regNum = regIndex + pThis->firstRegNum;
     if(pThis->regUser[regIndex]){
         /* if AST_NODE (register user) exist */
         ExpValPlace* place = pThis->regUser[regIndex]->valPlace;
-        int regNum = regIndex + pThis->firstRegNum;
 
         /* store value of register into stack */
         fprintf(targetFile, "sw $r%d, %d($fp)\n", regNum, GR.stackTop + 4);
-        place->data_type = INT_TYPE;
+        place->dataType = INT_TYPE;
         place->kind = STACK_TYPE;
         place->place.stackOffset = GR.stackTop + 4;
         GR.stackTop += 4;
     }
 
     releaseReg(pThis, regNum);
+}
+
+/*** Constant String Implementation ***/
+void initConstStringSet(ConstStringSet* pThis){
+    pThis->numOfConstString = 0;
+}
+
+void addConstString(ConstStringSet* pThis, int labelNum, char* string){
+    pThis->constStrings[pThis->numOfConstString].labelNum = labelNum;
+    pThis->constStrings[pThis->numOfConstString].string = string;
+    pThis->numOfConstString++;
+}
+
+void genConstStrings(ConstStringSet* pThis, FILE* targetFile){
+    int i;
+    for(i=0; i<pThis->numOfConstString; i++){
+        ConstStringPair* pair = pThis->constStrings[i];
+        fprintf(targetFile, "L%d: .asciiz %s\n", pair->labelNum, pair->string);
+    }
 }
 
 /*** MIPS instruction generation ***/
@@ -694,8 +715,8 @@ void genIntUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int
 
 void genFloatUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum){
     switch(op){
-        UNARY_OP_POSITIVE: genFPPosOpInstr(targetFile, distRegNum, srcRegNum); break;
-        UNARY_OP_NEGATIVE: genFPNegOpInstr(targetFile, distRegNum, srcRegNum); break;
+        UNARY_OP_POSITIVE: genFPPosOpInstr(targetFile, destRegNum, srcRegNum); break;
+        UNARY_OP_NEGATIVE: genFPNegOpInstr(targetFile, destRegNum, srcRegNum); break;
         UNARY_OP_LOGICAL_NEGATION: assert(0); break;
     }
 }
@@ -725,12 +746,12 @@ void genFloatBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op,
         BINARY_OP_SUB: genFPSubOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
         BINARY_OP_MUL: genFPMulOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
         BINARY_OP_DIV: genFPDivOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_EQ: genFPEQInstr(targetFile, distRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_GE: genFPNEInstr(targetFile, distRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_LE: genFPLTInstr(targetFile, distRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_NE: genFPGTInstr(targetFile, distRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_GT: genFPGEInstr(targetFile, distRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_LT: genFPLEInstr(targetFile, distRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_EQ: genFPEQInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_GE: genFPNEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_LE: genFPLTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_NE: genFPGTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_GT: genFPGEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_LT: genFPLEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
         BINARY_OP_AND: assert(0); break;
         BINARY_OP_OR: assert(0); break;
     }
@@ -808,103 +829,103 @@ void genFPSubOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2R
 }
 
 void genFPMulOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
-    fprintf(targetFile, "mul.s %f%d, $f%d, $f%d\n", destRegNum, src1RegNum, src2RegNum);
+    fprintf(targetFile, "mul.s $f%d, $f%d, $f%d\n", destRegNum, src1RegNum, src2RegNum);
 }
 
 void genFPDivOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
-    fprintf(targetFile, "div.s %f%d, $f%d, $f%d\n", destRegNum, src1RegNum, src2RegNum);
+    fprintf(targetFile, "div.s $f%d, $f%d, $f%d\n", destRegNum, src1RegNum, src2RegNum);
 }
 
-void genFPEQInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum){
+void genFPEQInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     int falseLabel = GR.labelCounter++;
     int exitLabel  = GR.labelCounter++;
     
     fprintf(targetFile, "c.eq.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", distRegNum);
-    fprintf(targetFile, "j L%d\n", exitLabel)
+    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", distRegNum);
+    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genFPNEInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum){
+void genFPNEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     int falseLabel = GR.labelCounter++;
     int exitLabel  = GR.labelCounter++;
     
     fprintf(targetFile, "c.eq.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", distRegNum);
-    fprintf(targetFile, "j L%d\n", exitLabel)
+    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", distRegNum);
+    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genFPLTInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum){
+void genFPLTInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     int falseLabel = GR.labelCounter++;
     int exitLabel  = GR.labelCounter++;
     
     fprintf(targetFile, "c.lt.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", distRegNum);
-    fprintf(targetFile, "j L%d\n", exitLabel)
+    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", distRegNum);
+    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genFPGTInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum){
+void genFPGTInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     int falseLabel = GR.labelCounter++;
     int exitLabel  = GR.labelCounter++;
     
     fprintf(targetFile, "c.le.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", distRegNum);
-    fprintf(targetFile, "j L%d\n", exitLabel)
+    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", distRegNum);
+    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genFPGEInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum){
+void genFPGEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     int falseLabel = GR.labelCounter++;
     int exitLabel  = GR.labelCounter++;
     
     fprintf(targetFile, "c.lt.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", distRegNum);
-    fprintf(targetFile, "j L%d\n", exitLabel)
+    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", distRegNum);
+    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genFPLEInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum){
+void genFPLEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     int falseLabel = GR.labelCounter++;
     int exitLabel  = GR.labelCounter++;
     
     fprintf(targetFile, "c.le.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", distRegNum);
-    fprintf(targetFile, "j L%d\n", exitLabel)
+    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", distRegNum);
+    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
-void genFPPosOpInstr(FILE* targetFile, int distRegNum, int srcRegNum){
-    fprintf(targetFile, "mov.s $f%d, $f%d\n", distRegNum, srcRegNum);
+void genFPPosOpInstr(FILE* targetFile, int destRegNum, int srcRegNum){
+    fprintf(targetFile, "mov.s $f%d, $f%d\n", destRegNum, srcRegNum);
 }
 
-void genFPNegOpInstr(FILE* targetFile, int distRegNum, int srcRegNum){
-    fprintf(targetFile, "neg.s $f%d, $f%d\n", distRegNum, srcRegNum);
+void genFPNegOpInstr(FILE* targetFile, int destRegNum, int srcRegNum){
+    fprintf(targetFile, "neg.s $f%d, $f%d\n", destRegNum, srcRegNum);
 }
 
 // casting
 void genFloatToInt(FILE* targetFile, int destRegNum, int floatRegNum){
-    fprintf(targetFile, "cvt.w.s $f%d\n", floatRegNum, floatRegNum);
-    fprintf(targetFile, "mfc1 %r%d, $f%d\n", destRegNum, floatRegNum);
+    fprintf(targetFile, "cvt.w.s $f%d, f%d\n", floatRegNum, floatRegNum);
+    fprintf(targetFile, "mfc1 $r%d, $f%d\n", destRegNum, floatRegNum);
 }
 
 void genIntToFloat(FILE* targetFile, int destRegNum, int intRegNum){
@@ -937,7 +958,7 @@ void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode){
         
         char *constString = ExprNode->semantic_value.const1->const_u.sc;
         int constStringLabel = GR.labelCounter++;
-        addConstString(GR->constStrings, constStringLabel, constStrings);
+        addConstString(GR.constStrings, constStringLabel, constStrings);
         fprintf(targetFile, "li $v0, 4\n");
         fprintf(targetFile, "la $a0 L%d\n", constStringLabel);
         fprintf(targetFile, "syscall\n");

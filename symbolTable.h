@@ -1,10 +1,11 @@
 #ifndef __SYMBOL_TABLE_H__
 #define __SYMBOL_TABLE_H__
+
 #include "header.h"
 #define ID_MAX_LEN 256
 
 /* struct type */
-typedef struct SymbolTableTree SymbolTableTree, STT;
+// typedef struct SymbolTableTree SymbolTableTree, STT;
 typedef struct SymbolTableNode SymbolTableNode;
 typedef struct SymbolTableEntry SymbolTableEntry;
     typedef enum SymbolTableEntryKind SymbolTableEntryKind;
@@ -79,6 +80,7 @@ struct SymbolTableEntry{
     /* Linked-List in Hash table */
     SymbolTableEntry* next;
 };
+
 /* methods */
 SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
   TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList); 

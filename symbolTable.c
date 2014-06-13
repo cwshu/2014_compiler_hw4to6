@@ -62,7 +62,7 @@ void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry){
     addSymbolInTableByEntry(pThis->currentInnerScope, entry);
 }
 
-SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
+SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name){
     SymbolTableNode* scope = pThis->currentInnerScope;
     SymbolTableEntry* entry = NULL;
     while(scope){
@@ -74,7 +74,7 @@ SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
     return NULL;
 }
 
-SymbolTableEntry* lookupSymbolWithLevel(SymbolTableTree* pThis, char* name, int* pLevel);
+SymbolTableEntry* lookupSymbolWithLevel(SymbolTableTree* pThis, char* name, int* pLevel){
     SymbolTableNode* scope = pThis->currentInnerScope;
     SymbolTableEntry* entry = NULL;
     *pLevel = pThis->currentLevel;

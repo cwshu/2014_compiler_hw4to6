@@ -8,8 +8,7 @@
 #include "header.h"
 #include "symbolTable.h"
 #include "semanticError.h"
-struct GlobalResource GR;
-GRinit(&GR);
+GlobalResource GR;
 
 int linenumber = 1;
 AST_NODE *prog;
@@ -76,7 +75,7 @@ static inline AST_NODE* makeIDNode(char *lexeme, IDENTIFIER_KIND idKind)
     AST_NODE* identifier = Allocate(IDENTIFIER_NODE);
     identifier->semantic_value.identifierSemanticValue.identifierName = lexeme;
     identifier->semantic_value.identifierSemanticValue.kind = idKind;
-    identifier->semantic_value.identifierSemanticValue.symbolTableEntry = NULL;
+    // identifier->semantic_value.identifierSemanticValue.symbolTableEntry = NULL;
     return identifier;                        
 }
 
@@ -774,6 +773,8 @@ int main(int argc, char *argv[]){
         return;
     }
 
+    GRinit(&GR);
+
     yyin = fopen(argv[1], "r");
     yyparse();
     printGV(prog, NULL);
@@ -783,8 +784,8 @@ int main(int argc, char *argv[]){
 
     FILE* targetFile = fopen(argv[2], "w");
     codeGen(targetFile, prog, symTable);
-    genConstStrings(GR->constStrings, targetFile);
-    GRfin(GR);
+    genConstStrings(GR.constStrings, targetFile);
+    GRfin(&GR);
 
     fclose(targetFile);
 } /* main */

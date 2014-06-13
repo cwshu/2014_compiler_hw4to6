@@ -1,9 +1,11 @@
 #ifndef __CODEGEN_H__
 #define __CODEGEN_H__
 
+#include "header.h"
+
 /*** Declarations ***/
-void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode, int* pLocalVarSize);
-void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode, int kind, int* pLocalVarSizeNow);
+void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode);
+void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode, int kind);
 void genFuncDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode);
     /* inner function */
 void genFuncHead(FILE* targetFile, char* funcName);
@@ -16,15 +18,15 @@ void genStmtList(FILE* targetFile, STT* symbolTable, AST_NODE* stmtListNode, cha
 void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcName);
 
 void genBlock(FILE* targetFile, STT *symbolTable, AST_NODE* blockNode, char* funcName);
-void genIfStmt(FILE* targetFile, AST_NODE* ifStmtNode, STT* symbolTable, char* funcName){
-void genWhileStmt(FILE* targetFile, AST_NODE* whileStmtNode, STT* symbolTable, char* funcName){
+void genIfStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName){
+void genWhileStmt(FILE* targetFile, STT* symbolTable, AST_NODE* whileStmtNode, char* funcName){
 // void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName);
 void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName);
 void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, char* funcName);
 
 void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentNode);
-void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* expressionNode);
-void genAssignExpr(FILE targetFile, STT* symbolTable, AST_NODE* exprNode);
+void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
+void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
     /* wrapper for AssignmentStmt and Expr*/
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
 void genProcessFuncReturnValue(FILE* targetFile, STT* SymbolTable, AST_NODE* exprNode);
@@ -34,11 +36,11 @@ void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode);
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
 
 /* spec-dependent constant */
-#define INT_RETURN_REG v0
-#define FLOAT_RETURN_REG f0
+#define INT_RETURN_REG "v0"
+#define FLOAT_RETURN_REG "f0"
 
 /*** Data Resourse, RegisterManager Implementation ***/
-typedef struct RegisterManager RegisterManager;
+// typedef struct RegisterManager RegisterManager;
 
 struct RegisterManager {
     int regFull[256];
@@ -67,33 +69,19 @@ int findEarlestUsedReg(RegisterManager* pThis);
 typedef struct ConstStringSet ConstStringSet;
 typedef struct ConstStringPair ConstStringPair;
 
-struct ConstStringSet{
-    int numOfConstString;
-    ConstStringSet constStrings[MAX_CON_STRING];
-};
-
 struct ConstStringPair{
     int labelNum;
     char* string;
 };
 
-void initConstStringSet(ConstStringSet* pThis){
-    pThis->numOfConstString = 0;
-}
+struct ConstStringSet{
+    int numOfConstString;
+    ConstStringPair constStrings[MAX_CON_STRING];
+};
 
-void addConstString(ConstStringSet* pThis, int labelNum, char* string){
-    pThis->constStrings[pThis->numOfConstString].labelNum = labelNum;
-    pThis->constStrings[pThis->numOfConstString].string = string;
-    pThis->numOfConstString++;
-}
-
-void genConstStrings(ConstStringSet* pThis, FILE* targetFile){
-    int i;
-    for(i=0; i<pThis->numOfConstString; i++){
-        ConstStringPair* pair = pThis->constStrings[i];
-        fprintf(targetFile, "L%d: .asciiz %s\n", pair->labelNum, pair->string);
-    }
-}
+void initConstStringSet(ConstStringSet* pThis);
+void addConstString(ConstStringSet* pThis, int labelNum, char* string);
+void genConstStrings(ConstStringSet* pThis, FILE* targetFile);
 
 /*** MIPS instruction generation ***/
 void genIntUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum);
@@ -127,15 +115,15 @@ void genFPSubOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2R
 void genFPMulOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
 void genFPDivOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
 
-void genFPEQInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum);
-void genFPNEInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum);
-void genFPLTInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum);
-void genFPGTInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum);
-void genFPGEInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum);
-void genFPLEInstr(FILE* targetFile, int distRegNum, int src1RegNum, int src2RegNum);
+void genFPEQInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
+void genFPNEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
+void genFPLTInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
+void genFPGTInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
+void genFPGEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
+void genFPLEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
 
-void genFPPosOpInstr(FILE* targetFile, int distRegNum, int srcRegNum);
-void genFPNegOpInstr(FILE* targetFile, int distRegNum, int srcRegNum);
+void genFPPosOpInstr(FILE* targetFile, int destRegNum, int srcRegNum);
+void genFPNegOpInstr(FILE* targetFile, int destRegNum, int srcRegNum);
 /* casting */
 void genFloatToInt(FILE* targetFile, int destRegNum, int floatRegNum);
 void genIntToFloat(FILE* targetFile, int destRegNum, int intRegNum);
