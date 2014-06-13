@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 #include "codeGen.h"
 #include "semanticAnalysis.h"
 #include "header.h"
@@ -149,14 +150,22 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     int rvalueRegNum = getExprNodeReg(rvalueNode);
     /* type conversion */
     if(lvalueType == INT_TYPE && rvalueType == FLOAT_TYPE){
-        int tmp = genFloatToInt(targetFile, rvalueRegNum);
-        releaseFPReg(rvalueRegNum);
-        rvalueRegNum = tmp;
+        int intRegNum = getReg(&(GR.regManager));
+        genFloatToInt(targetFile, intRegNum, rvalueRegNum);
+        releaseReg(&(GR.FPRegManager), rvalueRegNum);
+        rvalueRegNum = intRegNum;
+
+        setPlaceOfASTNodeToReg(rvalueNode, INT_TYPE, intRegNum);
+        useReg(GR.regManager, rvalueNode, intRegNum);
     }
     else if(lvalueType == FLOAT_TYPE && rvalueType == INT_TYPE){
-        int tmp = genIntToFloat(targetFile, rvalueRegNum);
-        releaseReg(rvalueRegNum);
-        rvalueRegNum = tmp;
+        int floatRegNum = getReg(&GR.FPRegManager);
+        genIntToFloat(targetFile, floatRegNum, rvalueRegNum);
+        releaseReg(&GR.regManager, rvalueRegNum);
+        rvalueRegNum = floatRegNum;
+
+        setPlaceOfASTNodeToReg(rvalueNode, FLOAT_TYPE, floatRegNum);
+        useReg(GR.FPRegManager, rvalueNode, floatRegNum);
     }
     /* assignment */
     if(lvalueType == INT_TYPE){
@@ -183,38 +192,21 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             int intRegNum = getReg(&GR.regManager, targetFile);
             fprintf(targetFile, "li $r%d, %d", intRegNum, value);
 
-            exprNode->valPlace.kind = INT_REG_TYPE;
-            exprNode->valPlace.place.regNum = intRegNum;
+            setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
+            useReg(&GR.regManager, intRegNum, exprNode);
         }
         else if ( exprNode->semantic_value.const1->const_type == FLOATC ){
             float value = exprNode->semantic_value.const1->const_u.fval;
-            int floatRegNum = getFPReg(&GR.regManager, targetFile);
+            int floatRegNum = getReg(&GR.FPRegManager, targetFile);
             fprintf(targetFile, "li.s $f%d, %d", floatRegNum, value);
 
-            exprNode->valPlace.kind = FLOAT_REG_TYPE;
-            exprNode->valPlace.place.regNum = floatRegNum;
+            setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
+            useReg(&GR.FPRegManager, floatRegNum, exprNode);
         }    
     }
     else if( exprNode->semantic_value.stmtSemanticValue.kind == FUNCTION_CALL_STMT ){
-        AST_NODE* funcNameNode = exprNode->child;
-        char* funcName = funcNameNode->semantic_value.identifierSemanticValue->identifierName;
-        SymbolTableEntry* funcEntry = lookupSymbol(symbolTable, funcName);
-        DATA_TYPE returnType = funcEntry->type->primitiveType;
-
-        if(returnType == INT_TYPE){
-            int intRegNum = getReg(&GR.regManager, targetFile);
-            fprintf(targetFile, "add $r%d, $%s, $r0\n", intRegNum, INT_RETURN_REG);
-
-            exprNode->valPlace.kind = INT_REG_TYPE;
-            exprNode->valPlace.place.regNum = intRegNum;
-        }
-        else if(returnType == FLOAT_TYPE){
-            int floatRegNum = getFPReg(&GR.regManager, targetFile);
-            fprintf(targetFile, "mov.s $f%d, $%s\n", intRegNum, INT_RETURN_REG);
-
-            exprNode->valPlace.kind = FLOAT_REG_TYPE;
-            exprNode->valPlace.place.regNum = floatRegNum;
-        }
+        genFunctionCall(targetFile, symbolTable, exprNode);
+        genProcessFuncReturnValue(targetFile, symbolTable, exprNode);
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
         char* name = exprNode->semantic_value.identifierSemanticValue->identifierName;
@@ -224,14 +216,21 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             scope = GLOBAL;
             entry = lookupSymbol(symbolTable, name);
         }
-        
+        DATA_TYPE type = entry->type->primitiveType;
+
         if(scope == LOCAL){
-            exprNode->valPlace.kind = STACK_TYPE;
-            exprNode->valPlace.place.stackOffset = entry->stackOffset;
+            if(type == INT_TYPE)
+                setPlaceOfASTNodeToStack(exprNode, INT_TYPE, entry->stackOffset);
+            else if(type == FLOAT_TYPE)
+                setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, entry->stackOffset);
+            /* UNFINISH: write("hello world") */
         }
         if(scope == GLOBAL){
-            exprNode->valPlace.kind = LABEL_TYPE;
-            exprNode->valPlace.place.label = entry->name;
+            if(type == INT_TYPE)
+                setPlaceOfASTNodeToLabel(exprNode, INT_TYPE, entry->name);
+            else if(type == FLOAT_TYPE)
+                setPlaceOfASTNodeToLabel(exprNode, FLOAT_TYPE, entry->name);
+            /* UNFINISH: write("hello world") */
         }
     }
     else if( exprNode->nodeType == EXPR_NODE ){
@@ -240,28 +239,24 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             DATA_TYPE type = checkExpr(exprNode->child);
             int childRegNum = getExprNodeReg(targetFile, exprNode);
 
-            UNARY_OPERATION op = exprNode->semantic_value.exprSemanticValue.op.unaryOp;
+            UNARY_OPERATOR op = exprNode->semantic_value.exprSemanticValue.op.unaryOp;
             if(type == INT_TYPE){
                 int regNum = getReg(GR.regManager, targetFile);
-                switch(op){
-                    UNARY_OP_POSITIVE: genPosOpInstr(targetFile, regNum, childRegNum); break;
-                    UNARY_OP_NEGATIVE: genNegOpInstr(targetFile, regNum, childRegNum); break;
-                    UNARY_OP_LOGICAL_NEGATION: genNOTExpr(targetFile, regNum, childRegNum); break;
-                }
-                exprNode->valPlace.kind = INT_REG_TYPE;
-                exprNode->valPlace.place.regNum = regNum; 
-                releaseReg(childRegNum);
+
+                genIntUnaryOpInstr(targetFile, op, regNum, childRegNum);
+
+                setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
+                useReg(GR.regManager, exprNode, regNum);
+                releaseReg(GR.regManager, childRegNum);
             }
             else if(type == FLOAT_TYPE){
-                int regNum = getFPReg(GR.regManager, targetFile);
-                switch(op){
-                    UNARY_OP_POSITIVE: break;
-                    UNARY_OP_NEGATIVE: break;
-                    UNARY_OP_LOGICAL_NEGATION: break;
-                }
-                exprNode->valPlace.kind = FLOAT_REG_TYPE;
-                exprNode->valPlace.place.regNum = regNum; 
-                releaseFPReg(childRegNum);
+                int regNum = getReg(GR.FPRegManager, targetFile);
+
+                genFloatUnaryOpInstr(targetFile, op, regNum, childRegNum);
+
+                setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
+                useReg(GR.FPRegManager, exprNode, regNum);
+                releaseReg(GR.FPRegManager, childRegNum);
             }
         }
         else if( exprNode->semantic_value.exprSemanticValue.kind == BINARY_OPERATION ){
@@ -271,65 +266,73 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             int child1RegNum = getExprNodeReg(targetFile, exprNode);
             int child2RegNum = getExprNodeReg(targetFile, exprNode);
 
-            BINARY_OPERATION op = exprNode->semantic_value.exprSemanticValue.op.binaryOp;
+            BINARY_OPERATOR op = exprNode->semantic_value.exprSemanticValue.op.binaryOp;
             if(type == INT_TYPE){
                 int regNum = getReg(GR.regManager, targetFile);
-                switch(op){
-                    BINARY_OP_ADD: genAddOpInstr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_SUB: genSubOpInstr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_MUL: genMulOpInstr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_DIV: genDivOpInstr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_EQ: genEQExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_GE: genGEExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_LE: genLEExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_NE: genNEExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_GT: genGTExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_LT: genLTExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_AND: genANDExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                    BINARY_OP_OR: genORExpr(targetFile, regNum, child1RegNum, child2RegNum); break;
-                }
-                exprNode->valPlace.kind = INT_REG_TYPE;
-                exprNode->valPlace.place.regNum = regNum; 
-                releaseReg(child1RegNum);
-                releaseReg(child2RegNum);
+
+                genIntBinaryOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
+
+                setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
+                useReg(GR.regManager, exprNode, regNum);
+                releaseReg(GR.regManager, child1RegNum);
+                releaseReg(GR.regManager, child2RegNum);
             }
             else if(type == FLOAT_TYPE){
-                int regNum = getReg(GR.regManager, targetFile);
-                switch(op){
-                    BINARY_OP_ADD: break;
-                    BINARY_OP_SUB: break;
-                    BINARY_OP_MUL: break;
-                    BINARY_OP_DIV: break;
-                    BINARY_OP_EQ: break;
-                    BINARY_OP_GE: break;
-                    BINARY_OP_LE: break;
-                    BINARY_OP_NE: break;
-                    BINARY_OP_GT: break;
-                    BINARY_OP_LT: break;
-                    BINARY_OP_AND: break;
-                    BINARY_OP_OR: break;
-                }
-                exprNode->valPlace.kind = INT_REG_TYPE;
-                exprNode->valPlace.place.regNum = regNum; 
-                releaseReg(child1RegNum);
-                releaseReg(child2RegNum);
+                int regNum = getReg(GR.FPRegManager, targetFile);
+
+                genFloatBinaryOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
+
+                setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
+                useReg(GR.FPRegManager, exprNode, regNum);
+                releaseReg(GR.FPRegManager, child1RegNum);
+                releaseReg(GR.FPRegManager, child2RegNum);
             }
         }
     }
 }
 
-int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
-/* return register or FP register of expression value.
- * For value in memory, load it to register */
-int genFloatToInt(FILE* targetFile, int floatRegNum);
-int genIntToFloat(FILE* targetFile, int intRegNum);
+void genFunctionCall(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
+    /* codegen for jumping to the function(label)
+     * HW6 Extension: with Parameter function call */
+}
 
+void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
+    /* after function call, process function return value, and store in exprNode->place */
+    AST_NODE* funcNameNode = exprNode->child;
+    char* funcName = funcNameNode->semantic_value.identifierSemanticValue->identifierName;
+    SymbolTableEntry* funcEntry = lookupSymbol(symbolTable, funcName);
+    DATA_TYPE returnType = funcEntry->type->primitiveType;
+
+    if(returnType == INT_TYPE){
+        int intRegNum = getReg(&GR.regManager, targetFile);
+        fprintf(targetFile, "add $r%d, $%s, $r0\n", intRegNum, INT_RETURN_REG); /* equal to move */
+
+        setPlaceOfASTNodeToReg(exprNode, INT_TYPE, intRegNum);
+        useReg(&GR.regManager, intRegNum)
+    }
+    else if(returnType == FLOAT_TYPE){
+        int floatRegNum = getReg(&GR.FPRegManager, targetFile);
+        fprintf(targetFile, "mov.s $f%d, $%s\n", floatRegNum, FLOAT_RETURN_REG);
+
+        setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, floatRegNum);
+        useReg(&GR.FPRegManager, floatRegNum);
+    }
+}
+int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
+    /* return register or FP register of expression value.
+     * For value in memory, load it to register */
+}
+void genFloatToInt(FILE* targetFile, int destRegNum, int floatRegNum);
+void genIntToFloat(FILE* targetFile, int destRegNum, int intRegNum);
 
 /*** function implementation ***/
 void genFuncDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     /* codegen for function definition */
-
+    AST_NODE* returnTypeNode = funcDeclarationNode->child;
     AST_NODE* funcNameNode = returnTypeNode->rightSibling;
+    AST_NODE* paraListNode = funcNameNode->rightSibling;
+    AST_NODE* blockNode = paraListNode->rightSibling;
+
     char* funcName = funcNameNode->semantic_value.identifierSemanticValue.identifierName;
     genFuncHead(targetFile, funcName);
 
@@ -341,7 +344,7 @@ void genFuncDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
      *             processing Decl_list + Stmt_list
      *             epilogue & closeScope
      */
-    AST_NODE* blockNode = paraListNode->rightSibling;
+
     openScope(symbolTable, USE);
     genPrologue(targetFile, funcName);
 
@@ -455,102 +458,143 @@ _end_{funcName}:
     _framesize_{funcName}: .word 36 + {localVarSize}
  */
 
-/* Data Resourse, RegisterManager */
-void RMinit(RegisterManager* pThis){
-    for(int i=0; i<MAX_REG_NUM; i++){
+/*** Data Resourse, RegisterManager Implementation ***/
+void RMinit(RegisterManager* pThis, int numOfReg, int firstRegNum){
+    pThis->numOfReg = numOfReg;
+    pThis->firstRegNum = firstRegNum;
+
+    for(int i=0; i<pThis->numOfReg; i++){
         pThis->regFull[i] = 0;
         pThis->regUser[i] = NULL;
     }
     pThis->lastReg = 0;
-    for(int i=0; i<MAX_FP_REG_NUM; i++){
-        pThis->FPregFull[i] = 0;
-        pThis->FPregUser[i] = NULL;
-    }
-    pThis->lastFPReg = 0;
 }
 
 int getReg(RegisterManager* pThis, FILE* targetFile){
     /* get empty register to use, return register Number (16 ~ 23 for s0 ~ s7, r16 ~ r23 ) */
+
+    /* find empty register first */
     int regIndex = findEmptyReg(pThis);
     if(regIndex != -1){
         pThis->regFull[index] = 1;
-        return regIndex;
+        int regNum = regIndex + pThis->firstRegNum;
+        return regNum;
     }
     
+    /* if no empty register, spill one register out */
     regIndex = findEarlestUsedReg(pThis);
     spillReg(pThis, regIndex, targetFile);
-    return regIndex + 16; // s0 = r16 in mips
+    int regNum = regIndex + pThis->firstRegNum; // s0 = r16 in mips
+    return regNum;
+}
+
+int useReg(RegisterManager* pThis, int regNum, AST_NODE* nodeUseThisReg){
+    /* AST_NODE use register, build link from register Manager to AST_NODE */
+    int regIndex = regNum - pThis->firstRegNum;
+    pThis->regUser[regIndex] = nodeUseThisReg;
 }
 
 void releaseReg(RegisterManager* pThis, int regNum){
-    pThis->regFull[regNum - 16] = 0;
+    /* release used register to free register.
+     * break link from Register Manager to AST_NODE */
+    int regIndex = regNum - pThis->firstRegNum;
+    pThis->regFull[regIndex] = 0;
+    pThis->regUser[regIndex] = NULL;
 }
 
 int findEmptyReg(RegisterManager* pThis){
+    /* find the nearest(compare to lastReg) empty register.
+     * if no empty register. return -1 */
     int index = pThis->lastReg+1;
     while(index != pThis->lastReg){
-        if(index == NULL)
+        if(!pThis->regFull[index]){
+            pThis->lastReg = index;
             return index;
-        index = (index+1)%MAX_REG_NUM;
+        }
+
+        index = (index+1) % pThis->numOfReg;
     }
     return -1;
 }
 
 int findEarlestUsedReg(RegisterManager* pThis){
-    return pThis->lastReg + 1;
+    /* find the earlest allocated register.
+     * the function used when all register is full. */
+    pThis->lastReg = (pThis->lastReg + 1) % pThis->numOfReg;
+    return pThis->lastReg;
 }
 
 void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
-    ExpValPlace* place = pThis->regUser[regIndex]->valPlace
+    /* spill value of register to the runtime stack, then release this register */
+    if(pThis->regUser[regIndex]){
+        /* if AST_NODE (register user) exist */
+        ExpValPlace* place = pThis->regUser[regIndex]->valPlace;
+        int regNum = regIndex + pThis->firstRegNum;
 
-    fprintf(targetFile, "sw $r%d, %d($fp)\n", regIndex+16, GR.stackTop + 4);
-    place->kind = STACK_TYPE;
-    place->place.stackOffset = GR.stackTop + 4;
-    GR.stackTop += 4;
-}
-
-/* floating point */
-int getFPReg(RegisterManager* pThis, FILE* targetFile){
-    /* get empty floating-point register to use, return register Number (0 ~ 31 for f0 ~ f31) */
-    int regIndex = findEmptyReg(pThis);
-    if(regIndex != -1){
-        pThis->FPregFull[index] = 1;
-        return regIndex;
+        /* store value of register into stack */
+        fprintf(targetFile, "sw $r%d, %d($fp)\n", regNum, GR.stackTop + 4);
+        place->data_type = INT_TYPE;
+        place->kind = STACK_TYPE;
+        place->place.stackOffset = GR.stackTop + 4;
+        GR.stackTop += 4;
     }
-    
-    regIndex = findEarlestUsedFPReg(pThis);
-    spillFPReg(pThis, regIndex, targetFile);
-    return regIndex;
-}
 
-void releaseFPReg(RegisterManager* pThis, int regNum){
-    pThis->regFPFull[regNum] = 0;
-}
-
-int findEmptyFPReg(RegisterManager* pThis){
-    int index = pThis->lastFPReg+1;
-    while(index != pThis->lastFPReg){
-        if(index == NULL)
-            return index;
-        index = (index+1)%MAX_FP_REG_NUM;
-    }
-    return -1;
-}
-
-int findEarlestUsedFPReg(RegisterManager* pThis){
-    return pThis->lastFPReg + 1;
-}
-
-void spillFPReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
-    ExpValPlace* place = pThis->regUser[regIndex]->valPlace
-
-    fprintf(targetFile, "l.s $f%d, %d($fp)\n", regIndex+16, GR.stackTop + 4);
-    place->kind = STACK_TYPE;
-    place->place.stackOffset = GR.stackTop + 4;
-    GR.stackTop += 4;
+    releaseReg(pThis, regNum);
 }
 
 /*** MIPS instruction generation ***/
+void genIntUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum){
+    switch(op){
+        UNARY_OP_POSITIVE: genPosOpInstr(targetFile, destRegNum, srcRegNum); break;
+        UNARY_OP_NEGATIVE: genNegOpInstr(targetFile, destRegNum, srcRegNum); break;
+        UNARY_OP_LOGICAL_NEGATION: genNOTExpr(targetFile, destRegNum, srcRegNum); break;
+    }
+}
+
+void genFloatUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum){
+    switch(op){
+        UNARY_OP_POSITIVE: assert(0); break;
+        UNARY_OP_NEGATIVE: assert(0); break;
+        UNARY_OP_LOGICAL_NEGATION: assert(0); break;
+    }
+}
+
+void genIntBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
+  int destRegNum, int src1RegNum, int src2RegNum){
+    switch(op){
+        BINARY_OP_ADD: genAddOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_SUB: genSubOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_MUL: genMulOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_DIV: genDivOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_EQ: genEQExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_GE: genGEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_LE: genLEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_NE: genNEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_GT: genGTExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_LT: genLTExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_AND: genANDExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        BINARY_OP_OR: genORExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+    }
+}
+
+void genFloatBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
+  int destRegNum, int src1RegNum, int src2RegNum){
+    switch(op){
+        BINARY_OP_ADD: assert(0); break;
+        BINARY_OP_SUB: assert(0); break;
+        BINARY_OP_MUL: assert(0); break;
+        BINARY_OP_DIV: assert(0); break;
+        BINARY_OP_EQ: assert(0); break;
+        BINARY_OP_GE: assert(0); break;
+        BINARY_OP_LE: assert(0); break;
+        BINARY_OP_NE: assert(0); break;
+        BINARY_OP_GT: assert(0); break;
+        BINARY_OP_LT: assert(0); break;
+        BINARY_OP_AND: assert(0); break;
+        BINARY_OP_OR: assert(0); break;
+    }
+}
+
 void genAddOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum){
     fprintf(targetFile, "add $r%d, $r%d, $r%d\n", destRegNum, src1RegNum, src2RegNum);
 }
