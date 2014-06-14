@@ -760,11 +760,11 @@ void genFloatBinaryRelaOpInstr(FILE* targetFile, BINARY_OPERATOR op,
   int destRegNum, int src1RegNum, int src2RegNum){
     switch(op){
         case BINARY_OP_EQ: genFPEQInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        case BINARY_OP_GE: genFPNEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        case BINARY_OP_LE: genFPLTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        case BINARY_OP_NE: genFPGTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        case BINARY_OP_GT: genFPGEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        case BINARY_OP_LT: genFPLEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_GE: genFPGEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_LE: genFPLEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_NE: genFPNEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_GT: genFPGTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_LT: genFPLTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
     }
 }
 

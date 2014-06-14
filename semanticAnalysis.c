@@ -749,19 +749,31 @@ DATA_TYPE getTypeOfExpr(STT* symbolTable, AST_NODE* exprNode){
     else if( exprNode->nodeType == EXPR_NODE ){
         AST_NODE* child = exprNode->child;
         
-        DATA_TYPE tempType = INT_TYPE;
-        while( child ){
-            
+        AST_NODE* tmpChild = child;
+        while(tmpChild){
             DATA_TYPE type = getTypeOfExpr(symbolTable, child);
-
             if( type == NONE_TYPE || type == VOID_TYPE )
                 return NONE_TYPE;
-            else if( type == FLOAT_TYPE )
-                tempType = FLOAT_TYPE;
-
-            child = child->rightSibling;
+            tmpChild = tmpChild->rightSibling;
         }
 
-        return tempType;
+        EXPR_KIND opKind = exprNode->semantic_value.exprSemanticValue.kind;
+        if(opKind == UNARY_OPERATION ){
+            return getTypeOfExpr(symbolTable, child);
+        }
+        else if(opKind == BINARY_OPERATION ){
+            BINARY_OPERATOR op = exprNode->semantic_value.exprSemanticValue.op.binaryOp;
+            if(op == BINARY_OP_EQ || op == BINARY_OP_GE || op == BINARY_OP_LE ||
+              op == BINARY_OP_NE || op == BINARY_OP_GT || op == BINARY_OP_LT){
+                return INT_TYPE;
+            }
+            DATA_TYPE child1type = getTypeOfExpr(symbolTable, child);
+            DATA_TYPE child2type = getTypeOfExpr(symbolTable, child);
+            if(child1type == FLOAT_TYPE || child2type == FLOAT_TYPE)
+                return FLOAT_TYPE;
+            return INT_TYPE;
+        }
+
+        return NONE_TYPE;
     }
 }
