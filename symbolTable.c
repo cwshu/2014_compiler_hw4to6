@@ -58,6 +58,13 @@ void closeScope(SymbolTableTree* pThis){
     pThis->currentInnerScope = pThis->currentInnerScope->parent;
 }
 
+void closeGlobalScope(SymbolTableTree* pThis){
+    /* exit traversing AST tree one time, wait for next time traversing */
+    // pThis->currentLevel = 0;
+    pThis->lastChildScope = NULL;
+    // pThis->currentInnerScope = pThis->root;
+}
+
 void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry){
     addSymbolInTableByEntry(pThis->currentInnerScope, entry);
 }

@@ -11,8 +11,9 @@ void setPlaceOfASTNodeToStack(AST_NODE *pThis, DATA_TYPE primiType, int stackOff
     pThis->valPlace.place.stackOffset = stackOffset;
 }
 
-void setPlaceOfASTNodeToLabel(AST_NODE *pThis, DATA_TYPE primiType, char* label){
+void setPlaceOfASTNodeToGlobalData(AST_NODE *pThis, DATA_TYPE primiType, char* label, int offset){
     pThis->valPlace.dataType = primiType;
-    pThis->valPlace.kind = LABEL_TYPE;
-    pThis->valPlace.place.label = label;
+    pThis->valPlace.kind = GLOBAL_TYPE;
+    pThis->valPlace.place.data.label = label;
+    pThis->valPlace.place.data.offset = offset;
 }

@@ -177,11 +177,16 @@ typedef struct CON_Type{
 } CON_Type;
 
 /*** AST place ***/
+typedef struct GlobalVarPlace {
+    char* label;
+    int offset;
+} GlobalVarPlace;
+
 typedef enum ExpValPlaceKind{
     NULL_TYPE,
     REG_TYPE,
     STACK_TYPE,
-    LABEL_TYPE
+    GLOBAL_TYPE
 } ExpValPlaceKind;
 
 struct ExpValPlace{
@@ -190,13 +195,13 @@ struct ExpValPlace{
     union {
         int regNum;
         int stackOffset;
-        char* label;
+        GlobalVarPlace data;
     } place;
 };
 
 void setPlaceOfASTNodeToReg(AST_NODE *pThis, DATA_TYPE primiType, int regNum);
 void setPlaceOfASTNodeToStack(AST_NODE *pThis, DATA_TYPE primiType, int stackOffset);
-void setPlaceOfASTNodeToLabel(AST_NODE *pThis, DATA_TYPE primiType, char* label);
+void setPlaceOfASTNodeToGlobalData(AST_NODE *pThis, DATA_TYPE primiType, char* label, int offset);
 
 /*** AST_NODE ***/
 struct AST_NODE {

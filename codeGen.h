@@ -2,6 +2,7 @@
 #define __CODEGEN_H__
 
 #include "header.h"
+#include "symbolTable.h"
 
 /*** Declarations ***/
 void genVariableDeclList(FILE* targetFile, STT* symbolTable, AST_NODE* variableDeclListNode);
@@ -34,6 +35,7 @@ void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode);
 void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode);
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
+int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode);
 
 /* spec-dependent constant */
 #define INT_RETURN_REG "v0"

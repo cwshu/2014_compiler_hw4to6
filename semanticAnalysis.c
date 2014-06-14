@@ -91,7 +91,7 @@ void processVariableDecl(STT* symbolTable, AST_NODE* declarationNode){
         }
     }
     else if(declKind == VARIABLE_DECL || declKind == FUNCTION_PARAMETER_DECL){
-        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
+        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 1);
         if(primitiveType == NONE_TYPE){
             printErrorMissingDecl(typeNode, primitiveTypeName);
             return;

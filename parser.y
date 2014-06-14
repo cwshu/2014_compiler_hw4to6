@@ -781,12 +781,14 @@ int main(int argc, char *argv[]){
 
     SymbolTableTree* symTable = createSymbolTableTree();
     semanticAnalysis(prog, symTable);
+    closeGlobalScope(symTable);
 
     FILE* targetFile = fopen(argv[2], "w");
     codeGen(targetFile, prog, symTable);
     genConstStrings(GR.constStrings, targetFile);
     GRfin(&GR);
-
+    closeGlobalScope(symTable);
+    
     fclose(targetFile);
 } /* main */
 
