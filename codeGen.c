@@ -69,9 +69,9 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
             if(type->dimension != 0)
                 fprintf(targetFile, "%s: .space %d\n", entry->name, varSize);
             else if(type->primitiveType == INT_TYPE)
-                fprintf(targetFile, "%s: .word\n", entry->name);
+                fprintf(targetFile, "%s: .word 0\n", entry->name);
             else if(type->primitiveType == FLOAT_TYPE)
-                fprintf(targetFile, "%s: .float\n", entry->name);
+                fprintf(targetFile, "%s: .float 0.0\n", entry->name);
         }
         else if(kind == LOCAL){
             entry->stackOffset = GR.stackTop + 4;
@@ -417,8 +417,8 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     else if( exprNode->nodeType == EXPR_NODE ){
         if( exprNode->semantic_value.exprSemanticValue.kind == UNARY_OPERATION ){
             genExpr(targetFile, symbolTable, exprNode->child);
-            DATA_TYPE type = checkExpr(exprNode->child);
-            int childRegNum = getExprNodeReg(targetFile, exprNode);
+            DATA_TYPE type = getTypeOfExpr(symbolTable, exprNode->child);
+            int childRegNum = getExprNodeReg(targetFile, exprNode->child);
 
             UNARY_OPERATOR op = exprNode->semantic_value.exprSemanticValue.op.unaryOp;
             if(type == INT_TYPE){
@@ -443,9 +443,9 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         else if( exprNode->semantic_value.exprSemanticValue.kind == BINARY_OPERATION ){
             genExpr(targetFile, symbolTable, exprNode->child);
             genExpr(targetFile, symbolTable, exprNode->child->rightSibling);
-            DATA_TYPE type = checkExpr(exprNode->child);
-            int child1RegNum = getExprNodeReg(targetFile, exprNode);
-            int child2RegNum = getExprNodeReg(targetFile, exprNode);
+            DATA_TYPE type = getTypeOfExpr(symbolTable, exprNode->child);
+            int child1RegNum = getExprNodeReg(targetFile, exprNode->child);
+            int child2RegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
 
             BINARY_OPERATOR op = exprNode->semantic_value.exprSemanticValue.op.binaryOp;
             if(type == INT_TYPE){
@@ -459,12 +459,31 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                 releaseReg(GR.regManager, child2RegNum);
             }
             else if(type == FLOAT_TYPE){
-                int regNum = getReg(GR.FPRegManager, targetFile);
+                int regNum;
 
-                genFloatBinaryOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
+                switch(op){
+                    case BINARY_OP_ADD: case BINARY_OP_SUB: case BINARY_OP_MUL:
+                    case BINARY_OP_DIV:
 
-                setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
-                useReg(GR.FPRegManager, regNum, exprNode);
+                        regNum = getReg(GR.FPRegManager, targetFile);
+                        genFloatBinaryArithOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
+                        setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
+                        useReg(GR.FPRegManager, regNum, exprNode);
+                        break;
+
+                    case BINARY_OP_EQ: case BINARY_OP_GE: case BINARY_OP_LE:
+                    case BINARY_OP_NE: case BINARY_OP_GT: case BINARY_OP_LT: 
+
+                        regNum = getReg(GR.regManager, targetFile);
+                        genFloatBinaryRelaOpInstr(targetFile, op, regNum, child1RegNum, child2RegNum);
+                        setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
+                        useReg(GR.FPRegManager, regNum, exprNode);
+                        break;
+
+                    case BINARY_OP_AND: case BINARY_OP_OR: 
+
+                        assert(0);
+                }
                 releaseReg(GR.FPRegManager, child1RegNum);
                 releaseReg(GR.FPRegManager, child2RegNum);
             }
@@ -535,7 +554,7 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
         }
         else if(exprNode->valPlace.dataType == FLOAT_TYPE){
             int regNum = getReg(GR.FPRegManager, targetFile);
-            fprintf(targetFile, "l.s $%d, -%d($fp)\n", regNum, stackOffset);
+            fprintf(targetFile, "l.s $f%d, -%d($fp)\n", regNum, stackOffset);
             useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
@@ -552,7 +571,7 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
         }
         else if(place->dataType == FLOAT_TYPE){
             int regNum = getReg(GR.FPRegManager, targetFile);
-            fprintf(targetFile, "l.s $%d, %s+%d\n", regNum, place->place.data.label, place->place.data.offset);
+            fprintf(targetFile, "l.s $f%d, %s+%d\n", regNum, place->place.data.label, place->place.data.offset);
             useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
@@ -636,7 +655,7 @@ void releaseReg(RegisterManager* pThis, int regNum){
 int findEmptyReg(RegisterManager* pThis){
     /* find the nearest(compare to lastReg) empty register.
      * if no empty register. return -1 */
-    int index = pThis->lastReg+1;
+    int index = (pThis->lastReg+1) % pThis->numOfReg;
     while(index != pThis->lastReg){
         if(!pThis->regFull[index]){
             pThis->lastReg = index;
@@ -695,53 +714,57 @@ void genConstStrings(ConstStringSet* pThis, FILE* targetFile){
 /*** MIPS instruction generation ***/
 void genIntUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum){
     switch(op){
-        UNARY_OP_POSITIVE: genPosOpInstr(targetFile, destRegNum, srcRegNum); break;
-        UNARY_OP_NEGATIVE: genNegOpInstr(targetFile, destRegNum, srcRegNum); break;
-        UNARY_OP_LOGICAL_NEGATION: genNOTExpr(targetFile, destRegNum, srcRegNum); break;
+        case UNARY_OP_POSITIVE: genPosOpInstr(targetFile, destRegNum, srcRegNum); break;
+        case UNARY_OP_NEGATIVE: genNegOpInstr(targetFile, destRegNum, srcRegNum); break;
+        case UNARY_OP_LOGICAL_NEGATION: genNOTExpr(targetFile, destRegNum, srcRegNum); break;
     }
 }
 
 void genFloatUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum){
     switch(op){
-        UNARY_OP_POSITIVE: genFPPosOpInstr(targetFile, destRegNum, srcRegNum); break;
-        UNARY_OP_NEGATIVE: genFPNegOpInstr(targetFile, destRegNum, srcRegNum); break;
-        UNARY_OP_LOGICAL_NEGATION: assert(0); break;
+        case UNARY_OP_POSITIVE: genFPPosOpInstr(targetFile, destRegNum, srcRegNum); break;
+        case UNARY_OP_NEGATIVE: genFPNegOpInstr(targetFile, destRegNum, srcRegNum); break;
+        case UNARY_OP_LOGICAL_NEGATION: assert(0); break;
     }
 }
 
 void genIntBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
   int destRegNum, int src1RegNum, int src2RegNum){
     switch(op){
-        BINARY_OP_ADD: genAddOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_SUB: genSubOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_MUL: genMulOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_DIV: genDivOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_EQ: genEQExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_GE: genGEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_LE: genLEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_NE: genNEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_GT: genGTExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_LT: genLTExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_AND: genANDExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_OR: genORExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_ADD: genAddOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_SUB: genSubOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_MUL: genMulOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_DIV: genDivOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_EQ: genEQExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_GE: genGEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_LE: genLEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_NE: genNEExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_GT: genGTExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_LT: genLTExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_AND: genANDExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_OR: genORExpr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
     }
 }
 
-void genFloatBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
+void genFloatBinaryArithOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
   int destRegNum, int src1RegNum, int src2RegNum){
     switch(op){
-        BINARY_OP_ADD: genFPAddOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_SUB: genFPSubOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_MUL: genFPMulOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_DIV: genFPDivOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_EQ: genFPEQInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_GE: genFPNEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_LE: genFPLTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_NE: genFPGTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_GT: genFPGEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_LT: genFPLEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
-        BINARY_OP_AND: assert(0); break;
-        BINARY_OP_OR: assert(0); break;
+        case BINARY_OP_ADD: genFPAddOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_SUB: genFPSubOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_MUL: genFPMulOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_DIV: genFPDivOpInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+    }
+}
+
+void genFloatBinaryRelaOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
+  int destRegNum, int src1RegNum, int src2RegNum){
+    switch(op){
+        case BINARY_OP_EQ: genFPEQInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_GE: genFPNEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_LE: genFPLTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_NE: genFPGTInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_GT: genFPGEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
+        case BINARY_OP_LT: genFPLEInstr(targetFile, destRegNum, src1RegNum, src2RegNum); break;
     }
 }
 
@@ -763,40 +786,40 @@ void genDivOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2Reg
     fprintf(targetFile, "mflo $%d\n", destRegNum);
 }
 
-void genEQExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "seq $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genEQExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "seq $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genNEExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "sne $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genNEExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "sne $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genLTExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "slt $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genLTExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "slt $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genGTExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "sgt $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genGTExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "sgt $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genLEExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "sle $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genLEExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "sle $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genGEExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "sge $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genGEExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "sge $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genANDExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "and $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genANDExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "and $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genORExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2){
-    fprintf(targetFile, "or $%d, $%d, $%d\n", distReg, srcReg1, srcReg2);
+void genORExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2){
+    fprintf(targetFile, "or $%d, $%d, $%d\n", destReg, srcReg1, srcReg2);
 }
 
-void genNOTExpr(FILE* targetFile, int distReg, int srcReg){
-    fprintf(targetFile, "seq $%d, $%d, $%d\n", distReg, srcReg, 0);
+void genNOTExpr(FILE* targetFile, int destReg, int srcReg){
+    fprintf(targetFile, "seq $%d, $%d, $%d\n", destReg, srcReg, 0);
 }
 
 void genPosOpInstr(FILE* targetFile, int destRegNum, int srcRegNum){
@@ -830,10 +853,10 @@ void genFPEQInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegN
     
     fprintf(targetFile, "c.eq.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 1\n", destRegNum);
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
@@ -843,10 +866,10 @@ void genFPNEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegN
     
     fprintf(targetFile, "c.eq.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 0\n", destRegNum);
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 1\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
@@ -856,10 +879,10 @@ void genFPLTInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegN
     
     fprintf(targetFile, "c.lt.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 1\n", destRegNum);
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
@@ -869,10 +892,10 @@ void genFPGTInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegN
     
     fprintf(targetFile, "c.le.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 0\n", destRegNum);
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 1\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
@@ -882,10 +905,10 @@ void genFPGEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegN
     
     fprintf(targetFile, "c.lt.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 0\n", destRegNum);
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 1\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
@@ -895,10 +918,10 @@ void genFPLEInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegN
     
     fprintf(targetFile, "c.le.s $f%d, $f%d\n", src1RegNum, src2RegNum);
     fprintf(targetFile, "bc1f L%d\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 1.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 1\n", destRegNum);
     fprintf(targetFile, "j L%d\n", exitLabel);
     fprintf(targetFile, "L%d:\n", falseLabel);
-    fprintf(targetFile, "li.s $f%d, 0.0\n", destRegNum);
+    fprintf(targetFile, "li $%d, 0\n", destRegNum);
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
@@ -912,7 +935,7 @@ void genFPNegOpInstr(FILE* targetFile, int destRegNum, int srcRegNum){
 
 // casting
 void genFloatToInt(FILE* targetFile, int destRegNum, int floatRegNum){
-    fprintf(targetFile, "cvt.w.s $f%d, f%d\n", floatRegNum, floatRegNum);
+    fprintf(targetFile, "cvt.w.s $f%d, $f%d\n", floatRegNum, floatRegNum);
     fprintf(targetFile, "mfc1 $%d, $f%d\n", destRegNum, floatRegNum);
 }
 
@@ -942,7 +965,8 @@ void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     genExpr(targetFile, symbolTable, ExprNode);
 
     // check type to be printed
-    if( ExprNode->dataType == CONST_STRING_TYPE ){
+    if( ExprNode->nodeType == CONST_VALUE_NODE && 
+      ExprNode->semantic_value.const1->const_type == STRINGC ){
         
         char *constString = ExprNode->semantic_value.const1->const_u.sc;
         int constStringLabel = GR.labelCounter++;
@@ -963,7 +987,7 @@ void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode){
         }
         else if(dataType == FLOAT_TYPE){
             int floatRegNum = getExprNodeReg(targetFile, ExprNode);
-            fprintf(targetFile, "li.s $v0, 2\n");
+            fprintf(targetFile, "li $v0, 2\n");
             fprintf(targetFile, "mov.s $f12, $f%d\n", floatRegNum);
             fprintf(targetFile, "syscall\n");
         }

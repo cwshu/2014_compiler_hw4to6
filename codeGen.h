@@ -90,7 +90,9 @@ void genIntUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int
 void genFloatUnaryOpInstr(FILE* targetFile, UNARY_OPERATOR op, int destRegNum, int srcRegNum);
 void genIntBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
   int destRegNum, int src1RegNum, int src2RegNum);
-void genFloatBinaryOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
+void genFloatBinaryArithOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
+  int destRegNum, int src1RegNum, int src2RegNum);
+void genFloatBinaryRelaOpInstr(FILE* targetFile, BINARY_OPERATOR op, 
   int destRegNum, int src1RegNum, int src2RegNum);
 /* int instruction */
 void genAddOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
@@ -98,16 +100,16 @@ void genSubOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2Reg
 void genMulOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
 void genDivOpInstr(FILE* targetFile, int destRegNum, int src1RegNum, int src2RegNum);
 
-void genEQExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genNEExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genLTExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genGTExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genLEExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genGEExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
+void genEQExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genNEExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genLTExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genGTExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genLEExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genGEExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
 
-void genANDExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genORExpr(FILE* targetFile, int distReg, int srcReg1, int srcReg2);
-void genNOTExpr(FILE* targetFile, int distReg, int srcReg);
+void genANDExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genORExpr(FILE* targetFile, int destReg, int srcReg1, int srcReg2);
+void genNOTExpr(FILE* targetFile, int destReg, int srcReg);
 
 void genPosOpInstr(FILE* targetFile, int destRegNum, int srcRegNum);
 void genNegOpInstr(FILE* targetFile, int destRegNum, int srcRegNum);
