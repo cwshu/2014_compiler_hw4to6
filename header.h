@@ -13,6 +13,7 @@ typedef struct AST_NODE AST_NODE;
 typedef struct SymbolTableTree SymbolTableTree, STT;
 typedef struct RegisterManager RegisterManager;
 typedef struct ConstStringSet ConstStringSet;
+void addBuiltinFunction(STT* symbolTable);
 
 /*** GlobalResource ***/
 struct GlobalResource {

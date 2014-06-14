@@ -5,6 +5,35 @@
 #include "symbolTable.h"
 #include "semanticError.h"
 
+/* 
+ * int read(void)
+ * float fread(void)
+ * void write(int/float/string)
+ */
+
+void addBuiltinFunction(STT* symbolTable){
+    char* readFuncName = malloc(10 * sizeof(char));
+    strncpy(readFuncName, "read", 5);
+    SymbolTableEntryKind readKind = FUNC_ENTRY;
+    TypeDescriptor* readReturnType = createScalarTypeDescriptor(INT_TYPE);
+    int readNumOfPara = 0;
+
+    SymbolTableEntry* readEntry = createSymbolTableEntry(readFuncName, readKind, 
+   readReturnType, readNumOfPara, NULL); 
+
+    char* freadFuncName = malloc(10 * sizeof(char));
+    strncpy(freadFuncName, "fread", 6);
+    SymbolTableEntryKind freadKind = FUNC_ENTRY;
+    TypeDescriptor* freadReturnType = createScalarTypeDescriptor(FLOAT_TYPE);
+    int freadNumOfPara = 0;
+
+    SymbolTableEntry* freadEntry = createSymbolTableEntry(freadFuncName, freadKind, 
+   freadReturnType, freadNumOfPara, NULL); 
+
+    addSymbolByEntry(symbolTable, readEntry);
+    addSymbolByEntry(symbolTable, freadEntry);
+}
+
 int isIgnoreFunctionName(char* name){
     if(strncmp(name, "read", 4) == 0) return 1;
     if(strncmp(name, "fread", 5) == 0) return 1;

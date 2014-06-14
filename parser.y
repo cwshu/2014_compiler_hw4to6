@@ -780,6 +780,7 @@ int main(int argc, char *argv[]){
     printGV(prog, NULL);
 
     SymbolTableTree* symTable = createSymbolTableTree();
+    addBuiltinFunction(symTable);
     semanticAnalysis(prog, symTable);
     closeGlobalScope(symTable);
 
