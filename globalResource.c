@@ -1,4 +1,5 @@
 #include "header.h"
+#include <stdlib.h>
 #include "codeGen.h"
 
 void GRinit(struct GlobalResource* GR){
