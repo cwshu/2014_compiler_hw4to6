@@ -767,11 +767,6 @@ dim_list	: dim_list MK_LB expr MK_RB
 
 #include "lex.yy.c"
 int main(int argc, char *argv[]){
-    if(argc != 3){
-        printf("Error arguments number\n");
-        printf("[compiler] [input] [out]\n");
-        return;
-    }
 
     GRinit(&GR);
 
@@ -784,7 +779,7 @@ int main(int argc, char *argv[]){
     semanticAnalysis(prog, symTable);
     closeGlobalScope(symTable);
 
-    FILE* targetFile = fopen(argv[2], "w");
+    FILE* targetFile = fopen("output.s", "w");
     codeGen(targetFile, prog, symTable);
     genConstStrings(GR.constStrings, targetFile);
     GRfin(&GR);
