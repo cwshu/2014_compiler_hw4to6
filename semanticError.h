@@ -16,3 +16,4 @@ void printErrorArrayPassToScal(AST_NODE* node, char* IDName, char* parameterName
 void printErrorScalPassToArray(AST_NODE* node, char* IDName, char* parameterName);
 /* extra */
 void printErrorInvalidExpr(AST_NODE* node);
+void printErrorNonIdScalPassToArray(AST_NODE* node, char* parameterName);

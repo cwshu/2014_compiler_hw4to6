@@ -562,8 +562,7 @@ void checkFuncCallStmt(STT* symbolTable, AST_NODE* expressionNode){
 
         else if( cursor->type->dimension > 0 && Label == VAR_ENTRY ){
             if(AST_cursor->nodeType != IDENTIFIER_NODE)
-                printErrorNonIdScalPassToArray(AST_cursor, 
-                                               AST_cursor->semantic_value.identifierSemanticValue.identifierName);
+                printErrorNonIdScalPassToArray(AST_cursor, cursor->name);
             else 
                 printErrorScalPassToArray(AST_cursor, cursor->name, 
                                           AST_cursor->semantic_value.identifierSemanticValue.identifierName);
@@ -636,7 +635,7 @@ void checkExpr(STT* symbolTable, AST_NODE* expressionNode, int isFuncPara){
             checkExpr(symbolTable, expressionNode->child->rightSibling, 0);
         }
 
-        else if( getTypeOfExpr( symbolTable, expressionNode ) == NONE_TYPE )
+        if( getTypeOfExpr( symbolTable, expressionNode ) == NONE_TYPE )
             printErrorInvalidExpr( expressionNode );
     }
     
