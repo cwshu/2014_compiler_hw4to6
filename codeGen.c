@@ -259,6 +259,42 @@ void genWhileStmt(FILE* targetFile, STT* symbolTable, AST_NODE* whileStmtNode, c
     fprintf(targetFile, "L%d:\n", exitLabel);
 }
 
+void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* forStmtNode, char* funcName){
+    
+    // node initialization
+    AST_NODE* assignNode = forStmtNode->child;
+    AST_NODE* condNode   = assignNode->rightSibling;
+    AST_NODE* incNode    = condNode->rightSibling;
+    AST_NODE* blockNode  = incNode->rightSibling;
+
+    // Label initialization
+    int testLabel = GR.labelCounter++;
+    int incLabel  = GR.labelCounter++;
+    int bodyLabel = GR.labelCounter++;
+    int exitLabel = GR.labelCounter++;
+
+    // assign stmt
+    genAssignExpr(targetFile, symbolTable, assignNode);
+
+    // condition
+    fprintf(targetFile, "L%d:\n", testLabel);
+    genExpr(targetFile, symbolTable, condNode);
+    fprintf(targetFile, "beqz $%d L%d\n", condNode->valPlace.place.regNum, exitLabel);
+    fprintf(targetFile, "j L%d\n", bodyLabel);
+
+    // increment stmt
+    fprintf(targetFile, "L%d:\n", incLabel);
+    genAssignExpr(targetFile, symbolTable, incNode);
+    fprintf(targetFile, "j L%d\n", testLabel);
+
+    // body
+    fprintf(targetFile, "L%d:\n", bodyLabel);
+    genStmt(targetFile, symbolTable, blockNode, funcName);
+    fprintf(targetFile, "j L%d\n", incLabel);
+    fprintf(targetFile, "L%d:\n", exitLabel);
+    
+}
+
 void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName){
     char* callingFuncName = exprNode->child->semantic_value.identifierSemanticValue.identifierName;
     if(strncmp(callingFuncName, "read", 4) == 0)

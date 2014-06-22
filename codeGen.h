@@ -21,7 +21,7 @@ void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcN
 void genBlock(FILE* targetFile, STT *symbolTable, AST_NODE* blockNode, char* funcName);
 void genIfStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName);
 void genWhileStmt(FILE* targetFile, STT* symbolTable, AST_NODE* whileStmtNode, char* funcName);
-// void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName);
+void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName);
 void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName);
 void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, char* funcName);
 
