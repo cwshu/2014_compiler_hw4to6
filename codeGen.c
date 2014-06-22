@@ -287,7 +287,7 @@ void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, cha
     }
     else if(returnType == FLOAT_TYPE){
         int retRegNum = getExprNodeReg(targetFile, returnNode->child);
-        fprintf(targetFile, "mov.s $f%s, $f%d\n", FLOAT_RETURN_REG, retRegNum);
+        fprintf(targetFile, "mov.s $%s, $f%d\n", FLOAT_RETURN_REG, retRegNum);
         releaseReg(GR.FPRegManager, retRegNum);
     }
 
