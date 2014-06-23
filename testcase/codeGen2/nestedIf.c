@@ -31,10 +31,10 @@ int main (){
         write(a);
         write("\nIn else...\n");
         if(a = 1){
-            write("\nIn nested if...\n");
+            write("In nested if...\n");
         }
         else{
-            write("\nIn nested else...\n");
+            write("In nested else...\n");
         }
     }
 

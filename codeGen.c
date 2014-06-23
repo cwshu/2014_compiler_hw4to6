@@ -670,11 +670,12 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
 void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     /* test, assign_expr(grammar): checkAssignmentStmt or checkExpr */
     if(exprNode->nodeType == STMT_NODE){
-        if(exprNode->semantic_value.stmtSemanticValue.kind == ASSIGN_STMT)
+        if(exprNode->semantic_value.stmtSemanticValue.kind == ASSIGN_STMT){
             genAssignmentStmt(targetFile, symbolTable, exprNode);
+            return;
+        }
     }
-    else 
-        genExpr(targetFile, symbolTable, exprNode);
+    genExpr(targetFile, symbolTable, exprNode);
 }
 
 int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int trueLabel, int falseLabel){
@@ -788,7 +789,7 @@ void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     }
     
     char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
-    fprintf(targetFile, "j %s\n",funcName);
+    fprintf(targetFile, "jal %s\n",funcName);
 
     /* pop out all the parameter if exist */
     fprintf(targetFile, "addi $sp, $sp, %d\n", 4 * numOfPara);
