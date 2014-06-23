@@ -68,16 +68,44 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
         if(kind == GLOBAL){
             if(type->dimension != 0)
                 fprintf(targetFile, "%s: .space %d\n", entry->name, varSize);
-            else if(type->primitiveType == INT_TYPE)
-                fprintf(targetFile, "%s: .word 0\n", entry->name);
-            else if(type->primitiveType == FLOAT_TYPE)
-                fprintf(targetFile, "%s: .float 0.0\n", entry->name);
+            else if(type->primitiveType == INT_TYPE){
+                int constValue = 0; // no initialzaton -> initialize to 0
+                if( variableNode->child ) // need to initialize
+                    constValue = variableNode->child->semantic_value.const1->const_u.intval;
+
+                fprintf(targetFile, "%s: .word %d\n", entry->name, constValue);
+            }
+            else if(type->primitiveType == FLOAT_TYPE){
+                float constValue = 0.0; // no initialzaton -> initialize to 0
+                if( variableNode->child ) // need to initialize
+                    constValue = variableNode->child->semantic_value.const1->const_u.fval;
+
+                fprintf(targetFile, "%s: .float %f\n", entry->name, constValue);
+            }
         }
         else if(kind == LOCAL){
             entry->stackOffset = GR.stackTop + 4;
             GR.stackTop += varSize;
-        }
 
+            // check if initialization required
+            if( variableNode->child ){ // need to initialize
+                
+                if( type->primitiveType == INT_TYPE ){
+                    
+                    int intRegNum = getReg(GR.regManager, targetFile);
+                    int constValue = variableNode->child->semantic_value.const1->const_u.intval;
+                    fprintf(targetFile, "li $%d, %d\n", intRegNum, constValue);
+                    fprintf(targetFile, "sw $%d, -%d($fp)\n", intRegNum, GR.stackTop);
+                }
+                else if( type->primitiveType == FLOAT_TYPE ){
+                    
+                    int floatRegNum = getReg(GR.FPRegManager, targetFile);
+                    float constValue = variableNode->child->semantic_value.const1->const_u.fval;
+                    fprintf(targetFile, "l.s $f%d, %f\n", floatRegNum, constValue);
+                    fprintf(targetFile, "s.s $f%d, -%d($fp)\n", floatRegNum, GR.stackTop);
+                }
+            }
+        }
         variableNode = variableNode->rightSibling;
     }
 }
@@ -392,6 +420,9 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
 void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     /* code generation for expression */
     if( exprNode->nodeType == CONST_VALUE_NODE ){
+        /* store const value in register.
+         * set register number in AST_NODE's place.
+         */
         if( exprNode->semantic_value.const1->const_type == INTEGERC){
             int value = exprNode->semantic_value.const1->const_u.intval;
             int intRegNum = getReg(GR.regManager, targetFile);
@@ -618,7 +649,10 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
 }
 
 int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode){
-    /* compute used Node's array offset */
+    /* compute used Node's array offset 
+     * example, a[5] for int a[10], offset = 5*sizeof(int) = 20
+     * example, a[5][6] for int a[10][10], offset = (50+6)*sizeof(int) = 224
+     */
     int arrayOffset = 0;
     int offsetOfEachDimension[MAX_ARRAY_DIMENSION] = {0};
 
