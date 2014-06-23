@@ -779,6 +779,9 @@ int main(int argc, char *argv[]){
     semanticAnalysis(prog, symTable);
     closeGlobalScope(symTable);
 
+    if (g_anyErrorOccur) /* Error found at semantic analysis */
+        return;
+
     FILE* targetFile = fopen("output.s", "w");
     codeGen(targetFile, prog, symTable);
     genConstStrings(GR.constStrings, targetFile);
