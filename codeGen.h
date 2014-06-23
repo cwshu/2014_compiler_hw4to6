@@ -10,7 +10,7 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
 void genFuncDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode);
     /* inner function */
 void genFuncHead(FILE* targetFile, char* funcName);
-// void genFuncParaList(FILE* targetFile, char* funcName);
+void setParaListStackOffset(STT* symbolTable, AST_NODE* paraListNode);
 void genPrologue(FILE* targetFile, char* funcName);
 void genEpilogue(FILE* targetFile, char* funcName, int localVarSize);
 

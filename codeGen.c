@@ -128,16 +128,17 @@ void genFuncDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode){
     char* funcName = funcNameNode->semantic_value.identifierSemanticValue.identifierName;
     genFuncHead(targetFile, funcName);
 
-    /*
-     * parameter list
-     */
-
     /* into block: openScope & prologue
      *             processing Decl_list + Stmt_list
      *             epilogue & closeScope
      */
 
     openScope(symbolTable, USE);
+    /* set parameters' place 
+     * the 1st arg is fp+8, 2nd is fp+12 ... 
+     * stackOffset = -8, -12 ... etc
+     */
+    setParaListStackOffset(symbolTable, paraListNode);
     genPrologue(targetFile, funcName);
 
     AST_NODE* blockChild = blockNode->child;
@@ -158,6 +159,23 @@ void genFuncDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode){
 void genFuncHead(FILE* targetFile, char* funcName){
     fprintf(targetFile, ".text\n"                     );
     fprintf(targetFile, "%s:\n"                       , funcName);
+}
+
+void setParaListStackOffset(STT* symbolTable, AST_NODE* paraListNode){
+    /* set parameters' place 
+     * the 1st arg is fp+8, 2nd is fp+12 ... 
+     * stackOffset = -8, -12 ... etc
+     */
+    AST_NODE* funcParaNode = paraListNode->child;
+    int stackOffset = -8;
+    while(funcParaNode){
+        char* varName = funcParaNode->child->rightSibling->semantic_value.identifierSemanticValue.identifierName;
+        SymbolTableEntry* varEntry = lookupSymbol(symbolTable, varName);
+        varEntry->stackOffset = stackOffset;
+
+        funcParaNode = funcParaNode->rightSibling;
+        stackOffset -= -4;
+    }
 }
 
 void genPrologue(FILE* targetFile, char* funcName){
