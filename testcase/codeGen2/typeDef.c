@@ -3,14 +3,14 @@ int main (){
     typedef int INT_ARRAY[4];
     INT_ARRAY matrix[8];
     int i;
-    for( i=0 ; i<8 ; i++ ){
-	for( j=0 ; j<4 ; j++ ){
+    for( i=0 ; i<8 ; i = i + 1 ){
+	for( j=0 ; j<4 ; j = j + 1 ){
             matrix[i][j] = i * 4 + j;
         }
     }
 
-    for( i=0 ; i<8 ; i++ ){
-	for( j=0 ; j<4 ; j++ ){
+    for( i=0 ; i<8 ; i = i + 1 ){
+	for( j=0 ; j<4 ; j = j + 1 ){
             write(matrix[i][j]);
             write(" ");
         }
