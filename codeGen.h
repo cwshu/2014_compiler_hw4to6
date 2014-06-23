@@ -32,6 +32,7 @@ void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
     /* wrapper for AssignmentStmt and Expr */
 int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int trueLabel, int falseLabel);
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
+int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode);
 void genProcessFuncReturnValue(FILE* targetFile, STT* SymbolTable, AST_NODE* exprNode);
 void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode);
 void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode);

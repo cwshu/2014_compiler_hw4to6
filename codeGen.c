@@ -730,8 +730,67 @@ void _normalEval(FILE* targetFile, AST_NODE* childNode, int jumpLabel, int jumpC
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     /* codegen for jumping to the function(label)
      * HW6 Extension: with Parameter function call */
+     
+    /* check if parameters exist
+    if exist -> push into stack */
+    int numOfPara = 0;
+    AST_NODE* paraNode = funcCallNode->child->rightSibling;
+    if( paraNode->nodeType != NUL_NODE ){ // parameters exist
+
+        paraNode = paraNode->child;
+        numOfPara = genParaList(targetFile, symbolTable, paraNode);
+    }
+    
     char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
     fprintf(targetFile, "j %s\n",funcName);
+
+    /* pop out all the parameter if exist */
+    int intRegNum = getReg(GR.regManager, targetFile);
+    fprintf(targetFile, "li $%d, %d\n", intRegNum, 4 * numOfPara);
+    fprintf(targetFile, "sub $sp, $sp, $%d\n", intRegNum);
+}
+
+int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
+    
+    int leftNumOfPara = 0;
+
+    // recursive call
+    if(paraNode->rightSibling)
+        leftNumOfPara = genParaList(targetFile, symbolTable, paraNode->rightSibling);
+    
+    // check if parameter is array
+    int dimension = 0;
+    if( paraNode->nodeType == IDENTIFIER_NODE ){
+        
+        char* varName = paraNode->semantic_value.identifierSemanticValue.identifierName;
+        SymbolTableEntry* entry = lookupSymbol(symbolTable, varName);
+        TypeDescriptor* type = entry->type;
+        dimension = type->dimension;
+    }
+
+    if( dimension != 0 ){
+        /* It is an array
+           GLOBAL -> get offset(name)
+           LOCAL  -> may access non-local array
+                     non-local array address relatives to non-local fp
+           HAVE NOT IMPLEMENTED */
+    }
+    else{ 
+        genExpr(targetFile, symbolTable, paraNode);
+        int regNum = getExprNodeReg(targetFile, paraNode);
+        
+        if( paraNode->valPlace.dataType == INT_TYPE )
+            fprintf(targetFile, "sw $%d, 0($sp)\n", paraNode->valPlace.place.regNum);
+        else if( paraNode->valPlace.dataType == FLOAT_TYPE )
+            fprintf(targetFile, "s.s $f%d, 0($sp)\n", paraNode->valPlace.place.regNum);
+
+        //both int & float require 4 bytes
+        int intRegNum = getReg(GR.regManager, targetFile);
+        fprintf(targetFile, "li $%d, %d\n", intRegNum, 4);
+        fprintf(targetFile, "add $sp, $sp, $%d\n", intRegNum);
+    }
+
+    return 1 + leftNumOfPara;
 }
 
 void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
