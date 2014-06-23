@@ -95,14 +95,14 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
                     int intRegNum = getReg(GR.regManager, targetFile);
                     int constValue = variableNode->child->semantic_value.const1->const_u.intval;
                     fprintf(targetFile, "li $%d, %d\n", intRegNum, constValue);
-                    fprintf(targetFile, "sw $%d, -%d($fp)\n", intRegNum, GR.stackTop);
+                    fprintf(targetFile, "sw $%d, %d($fp)\n", intRegNum, -1*GR.stackTop);
                 }
                 else if( type->primitiveType == FLOAT_TYPE ){
                     
                     int floatRegNum = getReg(GR.FPRegManager, targetFile);
                     float constValue = variableNode->child->semantic_value.const1->const_u.fval;
                     fprintf(targetFile, "l.s $f%d, %f\n", floatRegNum, constValue);
-                    fprintf(targetFile, "s.s $f%d, -%d($fp)\n", floatRegNum, GR.stackTop);
+                    fprintf(targetFile, "s.s $f%d, %d($fp)\n", floatRegNum, -1*GR.stackTop);
                 }
             }
         }
@@ -401,7 +401,7 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     ExpValPlace* lvaluePlace = &(lvalueNode->valPlace);
     if(lvalueType == INT_TYPE){
         if(lvaluePlace->kind == STACK_TYPE)
-            fprintf(targetFile, "sw $%d, -%d($fp)\n", rvalueRegNum, lvaluePlace->place.stackOffset);
+            fprintf(targetFile, "sw $%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
         else if(lvaluePlace->kind == GLOBAL_TYPE)
             fprintf(targetFile, "sw $%d, %s+%d\n", rvalueRegNum, 
               lvaluePlace->place.data.label, lvaluePlace->place.data.offset);
@@ -409,7 +409,7 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     }
     if(lvalueType == FLOAT_TYPE){
         if(lvaluePlace->kind == STACK_TYPE)
-            fprintf(targetFile, "s.s $%d, -%d($fp)\n", rvalueRegNum, lvaluePlace->place.stackOffset);
+            fprintf(targetFile, "s.s $%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
         else if(lvaluePlace->kind == GLOBAL_TYPE)
             fprintf(targetFile, "s.s $f%d, %s+%d\n", rvalueRegNum,
               lvaluePlace->place.data.label, lvaluePlace->place.data.offset);
@@ -458,6 +458,11 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         }
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
+        /* assign place to identifier place (LOCAL is stackOffset, GLOBAL is (label, offset))
+         * 1. find variable name
+         * 2. find symbolTable entry
+         * 3. compute array offset
+         */
         char* name = exprNode->semantic_value.identifierSemanticValue.identifierName;
         int level, scope = LOCAL;
         SymbolTableEntry* entry = lookupSymbolWithLevel(symbolTable, name, &level);
@@ -483,6 +488,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     }
     else if( exprNode->nodeType == EXPR_NODE ){
         if( exprNode->semantic_value.exprSemanticValue.kind == UNARY_OPERATION ){
+            /* exprNode = unary operator */
             genExpr(targetFile, symbolTable, exprNode->child);
             DATA_TYPE type = getTypeOfExpr(symbolTable, exprNode->child);
             int childRegNum = getExprNodeReg(targetFile, exprNode->child);
@@ -508,11 +514,38 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             }
         }
         else if( exprNode->semantic_value.exprSemanticValue.kind == BINARY_OPERATION ){
+            /* exprNode = binary operator */
             genExpr(targetFile, symbolTable, exprNode->child);
             genExpr(targetFile, symbolTable, exprNode->child->rightSibling);
-            DATA_TYPE type = getTypeOfExpr(symbolTable, exprNode->child);
-            int child1RegNum = getExprNodeReg(targetFile, exprNode->child);
-            int child2RegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
+
+            /* implicit type conversion */
+            DATA_TYPE type1 = getTypeOfExpr(symbolTable, exprNode->child);
+            DATA_TYPE type2 = getTypeOfExpr(symbolTable, exprNode->child->rightSibling);
+            assert(type1 == INT_TYPE || type1 == FLOAT_TYPE);
+            assert(type2 == INT_TYPE || type2 == FLOAT_TYPE);
+            DATA_TYPE type = type1; /* if type1 == type2, then type = type1 = type2 = (int or float) */
+            int child1RegNum, child2RegNum;
+            if(type1 != type2){
+                /* INT op FLOAT => FLOAT op FLOAT */
+                if(type1 == INT_TYPE){
+                    int child1OriRegNum = getExprNodeReg(targetFile, exprNode->child);
+                    child1RegNum = getReg(GR.FPRegManager, targetFile);
+                    genIntToFloat(targetFile, child1RegNum, child1OriRegNum);
+
+                    child2RegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
+                }
+                else if(type2 == INT_TYPE){
+                    int child2OriRegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
+                    child2RegNum = getReg(GR.FPRegManager, targetFile);
+                    genIntToFloat(targetFile, child2RegNum, child2OriRegNum);
+
+                    child1RegNum = getExprNodeReg(targetFile, exprNode->child);
+                }
+            }
+            else{
+                child1RegNum = getExprNodeReg(targetFile, exprNode->child);
+                child2RegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
+            }
 
             BINARY_OPERATOR op = exprNode->semantic_value.exprSemanticValue.op.binaryOp;
             if(type == INT_TYPE){
@@ -571,8 +604,8 @@ void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     /* codegen for jumping to the function(label)
      * HW6 Extension: with Parameter function call */
-     char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
-     fprintf(targetFile, "j %s\n",funcName);
+    char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
+    fprintf(targetFile, "j %s\n",funcName);
 }
 
 void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
@@ -605,7 +638,7 @@ void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode){
 }
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
-    /* return register or FP register of expression value.
+    /* return register or FP register of expression value(from exprNode->valPlace).
      * For value in memory, load it to register */
     if(exprNode->valPlace.kind == REG_TYPE){
         return exprNode->valPlace.place.regNum;
@@ -614,14 +647,14 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
         int stackOffset = exprNode->valPlace.place.stackOffset;
         if(exprNode->valPlace.dataType == INT_TYPE){
             int regNum = getReg(GR.regManager, targetFile);
-            fprintf(targetFile, "lw $%d, -%d($fp)\n", regNum, stackOffset);
+            fprintf(targetFile, "lw $%d, %d($fp)\n", regNum, -1*stackOffset);
             useReg(GR.regManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
             return regNum;
         }
         else if(exprNode->valPlace.dataType == FLOAT_TYPE){
             int regNum = getReg(GR.FPRegManager, targetFile);
-            fprintf(targetFile, "l.s $f%d, -%d($fp)\n", regNum, stackOffset);
+            fprintf(targetFile, "l.s $f%d, %d($fp)\n", regNum, -1*stackOffset);
             useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
@@ -752,7 +785,7 @@ void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
         ExpValPlace* place = &(pThis->regUser[regIndex]->valPlace);
 
         /* store value of register into stack */
-        fprintf(targetFile, "sw $%d, -%d($fp)\n", regNum, GR.stackTop + 4);
+        fprintf(targetFile, "sw $%d, %d($fp)\n", regNum, -1*(GR.stackTop + 4));
         place->dataType = INT_TYPE;
         place->kind = STACK_TYPE;
         place->place.stackOffset = GR.stackTop + 4;
