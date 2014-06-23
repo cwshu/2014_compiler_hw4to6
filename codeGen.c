@@ -68,16 +68,44 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
         if(kind == GLOBAL){
             if(type->dimension != 0)
                 fprintf(targetFile, "%s: .space %d\n", entry->name, varSize);
-            else if(type->primitiveType == INT_TYPE)
-                fprintf(targetFile, "%s: .word 0\n", entry->name);
-            else if(type->primitiveType == FLOAT_TYPE)
-                fprintf(targetFile, "%s: .float 0.0\n", entry->name);
+            else if(type->primitiveType == INT_TYPE){
+                int constValue = 0; // no initialzaton -> initialize to 0
+                if( variableNode->child ) // need to initialize
+                    constValue = variableNode->child->semantic_value.const1->const_u.intval;
+
+                fprintf(targetFile, "%s: .word %d\n", entry->name, constValue);
+            }
+            else if(type->primitiveType == FLOAT_TYPE){
+                float constValue = 0.0; // no initialzaton -> initialize to 0
+                if( variableNode->child ) // need to initialize
+                    constValue = variableNode->child->semantic_value.const1->const_u.fval;
+
+                fprintf(targetFile, "%s: .float %f\n", entry->name, constValue);
+            }
         }
         else if(kind == LOCAL){
             entry->stackOffset = GR.stackTop + 4;
             GR.stackTop += varSize;
-        }
 
+            // check if initialization required
+            if( variableNode->child ){ // need to initialize
+                
+                if( type->primitiveType == INT_TYPE ){
+                    
+                    int intRegNum = getReg(GR.regManager, targetFile);
+                    int constValue = variableNode->child->semantic_value.const1->const_u.intval;
+                    fprintf(targetFile, "li $%d, %d\n", intRegNum, constValue);
+                    fprintf(targetFile, "sw $%d, -%d($fp)\n", intRegNum, GR.stackTop);
+                }
+                else if( type->primitiveType == FLOAT_TYPE ){
+                    
+                    int floatRegNum = getReg(GR.FPRegManager, targetFile);
+                    float constValue = variableNode->child->semantic_value.const1->const_u.fval;
+                    fprintf(targetFile, "l.s $f%d, %f\n", floatRegNum, constValue);
+                    fprintf(targetFile, "s.s $f%d, -%d($fp)\n", floatRegNum, GR.stackTop);
+                }
+            }
+        }
         variableNode = variableNode->rightSibling;
     }
 }
@@ -392,6 +420,9 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
 void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     /* code generation for expression */
     if( exprNode->nodeType == CONST_VALUE_NODE ){
+        /* store const value in register.
+         * set register number in AST_NODE's place.
+         */
         if( exprNode->semantic_value.const1->const_type == INTEGERC){
             int value = exprNode->semantic_value.const1->const_u.intval;
             int intRegNum = getReg(GR.regManager, targetFile);
@@ -540,8 +571,67 @@ void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     /* codegen for jumping to the function(label)
      * HW6 Extension: with Parameter function call */
-     char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
-     fprintf(targetFile, "j %s\n",funcName);
+     
+    /* check if parameters exist
+    if exist -> push into stack */
+    int numOfPara = 0;
+    AST_NODE* paraNode = funcCallNode->child->rightSibling;
+    if( paraNode->nodeType != NUL_NODE ){ // parameters exist
+
+        paraNode = paraNode->child;
+        numOfPara = genParaList(targetFile, symbolTable, paraNode);
+    }
+    
+    char *funcName = funcCallNode->child->semantic_value.identifierSemanticValue.identifierName;
+    fprintf(targetFile, "j %s\n",funcName);
+
+    /* pop out all the parameter if exist */
+    int intRegNum = getReg(GR.regManager, targetFile);
+    fprintf(targetFile, "li $%d, %d\n", intRegNum, 4 * numOfPara);
+    fprintf(targetFile, "sub $sp, $sp, $%d\n", intRegNum);
+}
+
+int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
+    
+    int leftNumOfPara = 0;
+
+    // recursive call
+    if(paraNode->rightSibling)
+        leftNumOfPara = genParaList(targetFile, symbolTable, paraNode->rightSibling);
+    
+    // check if parameter is array
+    int dimension = 0;
+    if( paraNode->AST_TYPE == IDENTIFIER_NODE ){
+        
+        char* varName = paraNode->semantic_value.identifierSemanticValue.identifierName;
+        SymbolTableEntry* entry = lookupSymbol(symbolTable, varName);
+        TypeDescriptor* type = entry->type;
+        dimension = type->dimension;
+    }
+
+    if( dimension != 0 ){
+        /* It is an array
+           GLOBAL -> get offset(name)
+           LOCAL  -> may access non-local array
+                     non-local array address relatives to non-local fp
+           HAVE NOT IMPLEMENTED */
+    }
+    else{ 
+        genExpr(targetFile, symbolTable, paraNode);
+        int regNum = getExprNodeReg(targetFile, paraNode);
+        
+        if( paraNode->valPlace.dataType == INT_TYPE )
+            fprintf(targetFile, "sw $%d, 0($sp)\n", paraNode->valPlace.place.regNum);
+        else if( paraNode->valPlace.dataType == FLOAT_TYPE )
+            fprintf(targetFile, "s.s $f%d, 0($sp)\n", paraNode->valPlace.place.regNum);
+
+        //both int & float require 4 bytes
+        int intRegNum = getReg(GR.regManager, targetFile);
+        fprintf(targetFile, "li $%d, %d\n", intRegNum, 4);
+        fprintf(targetFile, "add $sp, $sp, $%d\n", intRegNum);
+    }
+
+    return 1 + leftNumOfPara;
 }
 
 void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
@@ -618,7 +708,10 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
 }
 
 int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode){
-    /* compute used Node's array offset */
+    /* compute used Node's array offset 
+     * example, a[5] for int a[10], offset = 5*sizeof(int) = 20
+     * example, a[5][6] for int a[10][10], offset = (50+6)*sizeof(int) = 224
+     */
     int arrayOffset = 0;
     int offsetOfEachDimension[MAX_ARRAY_DIMENSION] = {0};
 
