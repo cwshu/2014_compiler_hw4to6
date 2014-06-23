@@ -27,8 +27,10 @@ void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, cha
 
 void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentNode);
 void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
-void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
-    /* wrapper for AssignmentStmt and Expr*/
+
+void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode); 
+    /* wrapper for AssignmentStmt and Expr */
+int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int trueLabel, int falseLabel);
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode);
 void genProcessFuncReturnValue(FILE* targetFile, STT* SymbolTable, AST_NODE* exprNode);
 void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode);

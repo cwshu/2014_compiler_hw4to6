@@ -9,6 +9,13 @@
 #define LOCAL 2
 GlobalResource GR;
 
+/* inner function prototype */
+void _normalEval(FILE* targetFile, AST_NODE* childNode, int jumpLabel, int jumpCond);
+/* jumpCond = TRUE_JUMP or FALSE_JUMP */
+#define TRUE_JUMP 1
+#define FALSE_JUMP 0
+
+/* function definition */
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
     AST_NODE* child = prog->child;
     while(child){
@@ -241,22 +248,31 @@ void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode, char* fun
 
 void genIfStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* funcName){
     
-    // condition
-    genAssignExpr(targetFile, symbolTable, ifStmtNode->child);
-    
-    // jump to else if condition not match
+    int thenLabel = GR.labelCounter++;
     int elseLabel = GR.labelCounter++;
     int exitLabel = GR.labelCounter++;
-    fprintf(targetFile, "beqz $%d L%d\n", ifStmtNode->child->valPlace.place.regNum, elseLabel);
+    // condition
+    int isShortEval = genShortRelExpr(targetFile, symbolTable, ifStmtNode->child, thenLabel, elseLabel);
+    
+    if(!isShortEval){
+        // jump to else if condition not match
+        int regNum = getExprNodeReg(targetFile, ifStmtNode->child);
+        fprintf(targetFile, "beqz $%d L%d\n", regNum, elseLabel);
+        if(ifStmtNode->child->valPlace.dataType == INT_TYPE)
+            releaseReg(GR.regManager, regNum);
+        else if(ifStmtNode->child->valPlace.dataType == FLOAT_TYPE)
+            releaseReg(GR.FPRegManager, regNum);
+    }
     
     // then block
+    fprintf(targetFile, "L%d:\n", thenLabel);
     genStmt(targetFile, symbolTable, ifStmtNode->child->rightSibling, funcName);
     
     // jump over else
     fprintf(targetFile, "j L%d\n", exitLabel);
-    fprintf(targetFile, "L%d:\n", elseLabel);
 
     // else block
+    fprintf(targetFile, "L%d:\n", elseLabel);
     if( ifStmtNode->child->rightSibling->rightSibling->nodeType != NUL_NODE )
         genStmt(targetFile, symbolTable, ifStmtNode->child->rightSibling->rightSibling, funcName);
 
@@ -266,18 +282,28 @@ void genIfStmt(FILE* targetFile, STT* symbolTable, AST_NODE* ifStmtNode, char* f
 
 void genWhileStmt(FILE* targetFile, STT* symbolTable, AST_NODE* whileStmtNode, char* funcName){
     
-    // Test Label
     int testLabel = GR.labelCounter++;
+    int whileStmtLabel = GR.labelCounter++;
     int exitLabel = GR.labelCounter++;
+
+    // Test Label
     fprintf(targetFile, "L%d:\n", testLabel);
     
     // condition
-    genAssignExpr(targetFile, symbolTable, whileStmtNode->child);
+    int isShortEval = genShortRelExpr(targetFile, symbolTable, whileStmtNode->child, whileStmtLabel, exitLabel);
     
-    // check condition
-    fprintf(targetFile, "beqz $%d L%d\n", whileStmtNode->child->valPlace.place.regNum, exitLabel);
+    if(!isShortEval){
+        // check condition
+        int regNum = getExprNodeReg(targetFile, whileStmtNode->child);
+        fprintf(targetFile, "beqz $%d L%d\n", regNum, exitLabel);
+        if(whileStmtNode->child->valPlace.dataType == INT_TYPE)
+            releaseReg(GR.regManager, regNum);
+        else if(whileStmtNode->child->valPlace.dataType == FLOAT_TYPE)
+            releaseReg(GR.FPRegManager, regNum);
+    }
     
     // Stmt
+    fprintf(targetFile, "L%d:\n", whileStmtLabel);
     genStmt(targetFile, symbolTable, whileStmtNode->child->rightSibling, funcName);
 
     // loop back
@@ -305,10 +331,13 @@ void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* forStmtNode, char*
     genAssignExpr(targetFile, symbolTable, assignNode);
 
     // condition
+    // UNFINISH: genShortRelExpr
     fprintf(targetFile, "L%d:\n", testLabel);
-    genExpr(targetFile, symbolTable, condNode);
-    fprintf(targetFile, "beqz $%d L%d\n", condNode->valPlace.place.regNum, exitLabel);
-    fprintf(targetFile, "j L%d\n", bodyLabel);
+    int isShortEval = genShortRelExpr(targetFile, symbolTable, condNode, bodyLabel, exitLabel);
+    if(!isShortEval){
+        fprintf(targetFile, "beqz $%d L%d\n", condNode->valPlace.place.regNum, exitLabel);
+        fprintf(targetFile, "j L%d\n", bodyLabel);
+    }
 
     // increment stmt
     fprintf(targetFile, "L%d:\n", incLabel);
@@ -319,8 +348,9 @@ void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* forStmtNode, char*
     fprintf(targetFile, "L%d:\n", bodyLabel);
     genStmt(targetFile, symbolTable, blockNode, funcName);
     fprintf(targetFile, "j L%d\n", incLabel);
+
+    // exit
     fprintf(targetFile, "L%d:\n", exitLabel);
-    
 }
 
 void genFuncCallStmt(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, char* funcName){
@@ -599,6 +629,102 @@ void genAssignExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
     }
     else 
         genExpr(targetFile, symbolTable, exprNode);
+}
+
+int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int trueLabel, int falseLabel){
+    /* generate short circuit relational expression for IF/FOR/WHILE stmt's conditional expression 
+     *
+     * return 1 if using short circuit evaluation.
+     * return 0 if using normal genAssignExpr.
+     *
+     * trueLabel means if exprNode is true, jump to true
+     * falseLabel means if exprNode is false, jump to false
+     *
+     * and(true, false):
+     *     j false if not exp1 ( genShortRelExpr(exp1, exp1True, false) )
+     *     exp1True:
+     *     j false if not exp2 ( genShortRelExpr(exp2, true, false) )
+     *     j true
+     *
+     * or(true, false):
+     *     j true if exp1 ( genShortRelExpr(exp1, true, exp1False) )
+     *     exp1False:
+     *     j true if exp2 ( genShortRelExpr(exp2, true, false`) )
+     *     j false
+     */
+
+    int isRelOp = 0;
+    EXPR_KIND opKind;
+    BINARY_OPERATOR binaryOp;
+    if(exprNode->nodeType == EXPR_NODE){
+        opKind = exprNode->semantic_value.exprSemanticValue.kind;
+
+        if(opKind == BINARY_OPERATION){
+            binaryOp = exprNode->semantic_value.exprSemanticValue.op.binaryOp;
+
+            if(binaryOp == BINARY_OP_AND || binaryOp == BINARY_OP_OR)
+                isRelOp = 1;
+        }
+    }
+
+    if(isRelOp == 0){
+        genAssignExpr(targetFile, symbolTable, exprNode);
+        return 0;
+    }
+    else if(isRelOp == 1){
+        if(binaryOp == BINARY_OP_AND){
+            int child1TrueLabel = GR.labelCounter++;
+
+            int isShortEval = genShortRelExpr(targetFile, symbolTable, 
+              exprNode->child, child1TrueLabel, falseLabel);
+
+            if(!isShortEval) /* j false if not exp1 */
+                _normalEval(targetFile, exprNode->child, falseLabel, FALSE_JUMP);
+
+            fprintf(targetFile, "L%d:\n", child1TrueLabel);
+
+            isShortEval = genShortRelExpr(targetFile, symbolTable, 
+              exprNode->child->rightSibling, trueLabel, falseLabel);
+
+            if(!isShortEval) /* j false if not exp2 */
+                _normalEval(targetFile, exprNode->child->rightSibling, falseLabel, FALSE_JUMP);
+
+            fprintf(targetFile, "j L%d:\n", trueLabel);
+        }
+        if(binaryOp == BINARY_OP_OR){
+            int child1FalseLabel = GR.labelCounter++;
+
+            int isShortEval = genShortRelExpr(targetFile, symbolTable, 
+              exprNode->child, trueLabel, child1FalseLabel);
+
+            if(!isShortEval) /* j true if exp1 */
+                _normalEval(targetFile, exprNode->child, trueLabel, TRUE_JUMP);
+
+            fprintf(targetFile, "L%d:\n", child1FalseLabel);
+
+            isShortEval = genShortRelExpr(targetFile, symbolTable, 
+              exprNode->child->rightSibling, trueLabel, falseLabel);
+
+            if(!isShortEval) /* j true if exp2 */
+                _normalEval(targetFile, exprNode->child->rightSibling, trueLabel, TRUE_JUMP);
+
+            fprintf(targetFile, "j L%d:\n", falseLabel);
+        }
+    }
+}
+
+void _normalEval(FILE* targetFile, AST_NODE* childNode, int jumpLabel, int jumpCond){
+    int regNum = getExprNodeReg(targetFile, childNode);
+
+    if(jumpCond == TRUE_JUMP)
+        fprintf(targetFile, "bne $%d, $0, L%d\n", regNum, jumpLabel); /* j jumpLabel if exp1 */
+    else if(jumpCond == FALSE_JUMP)
+        fprintf(targetFile, "beqz $%d, L%d\n", regNum, jumpLabel); /* j jumpLabel if not exp1 */
+
+    if(childNode->valPlace.dataType == INT_TYPE)
+        releaseReg(GR.regManager, regNum);
+    else if(childNode->valPlace.dataType == FLOAT_TYPE)
+        releaseReg(GR.FPRegManager, regNum);
 }
 
 void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
