@@ -222,7 +222,7 @@ void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcN
         STMT_KIND stmtKind = stmtNode->semantic_value.stmtSemanticValue.kind;
         switch( stmtKind ){
             case WHILE_STMT: genWhileStmt(targetFile, symbolTable, stmtNode, funcName); break;
-            case FOR_STMT: assert(0); break;
+            case FOR_STMT: genForStmt(targetFile, symbolTable, stmtNode, funcName); break;
             case IF_STMT: genIfStmt(targetFile, symbolTable, stmtNode, funcName); break;
             case ASSIGN_STMT: genAssignmentStmt(targetFile, symbolTable, stmtNode); break;
             case FUNCTION_CALL_STMT: genFuncCallStmt(targetFile, symbolTable, stmtNode, funcName); break;
@@ -316,10 +316,10 @@ void genWhileStmt(FILE* targetFile, STT* symbolTable, AST_NODE* whileStmtNode, c
 void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* forStmtNode, char* funcName){
     
     // node initialization
-    AST_NODE* assignNode = forStmtNode->child;
-    AST_NODE* condNode   = assignNode->rightSibling;
-    AST_NODE* incNode    = condNode->rightSibling;
-    AST_NODE* blockNode  = incNode->rightSibling;
+    AST_NODE* assignNode = forStmtNode->child->child;
+    AST_NODE* condNode   = forStmtNode->child->rightSibling->child;
+    AST_NODE* incNode    = forStmtNode->child->rightSibling->rightSibling->child;
+    AST_NODE* blockNode  = forStmtNode->child->rightSibling->rightSibling->rightSibling;
 
     // Label initialization
     int testLabel = GR.labelCounter++;
@@ -328,20 +328,40 @@ void genForStmt(FILE* targetFile, STT* symbolTable, AST_NODE* forStmtNode, char*
     int exitLabel = GR.labelCounter++;
 
     // assign stmt
-    genAssignExpr(targetFile, symbolTable, assignNode);
+    while(assignNode){ // handle multiple assign stmt
+
+        genAssignExpr(targetFile, symbolTable, assignNode);
+        assignNode = assignNode->rightSibling;
+    }
 
     // condition
     // UNFINISH: genShortRelExpr
     fprintf(targetFile, "L%d:\n", testLabel);
-    int isShortEval = genShortRelExpr(targetFile, symbolTable, condNode, bodyLabel, exitLabel);
-    if(!isShortEval){
-        fprintf(targetFile, "beqz $%d L%d\n", condNode->valPlace.place.regNum, exitLabel);
-        fprintf(targetFile, "j L%d\n", bodyLabel);
+    
+        // handle multiple condition expr, except for last one
+    if(condNode){
+        while(condNode->rightSibling){
+            
+            genAssignExpr(targetFile, symbolTable, condNode);
+            condNode = condNode->rightSibling;
+        }
+            // last condition expr
+        int isShortEval = genShortRelExpr(targetFile, symbolTable, condNode, bodyLabel, exitLabel);
+        if(!isShortEval){
+            fprintf(targetFile, "beqz $%d L%d\n", condNode->valPlace.place.regNum, exitLabel);
+            fprintf(targetFile, "j L%d\n", bodyLabel);
+        }
     }
 
     // increment stmt
     fprintf(targetFile, "L%d:\n", incLabel);
-    genAssignExpr(targetFile, symbolTable, incNode);
+
+    while(incNode){ // handle multiple assign stmt
+
+        genAssignExpr(targetFile, symbolTable, incNode);
+        incNode = incNode->rightSibling;
+    }
+
     fprintf(targetFile, "j L%d\n", testLabel);
 
     // body
@@ -753,9 +773,7 @@ void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
     fprintf(targetFile, "j %s\n",funcName);
 
     /* pop out all the parameter if exist */
-    int intRegNum = getReg(GR.regManager, targetFile);
-    fprintf(targetFile, "li $%d, %d\n", intRegNum, 4 * numOfPara);
-    fprintf(targetFile, "sub $sp, $sp, $%d\n", intRegNum);
+    fprintf(targetFile, "addi $sp, $sp, %d\n", 4 * numOfPara);
 }
 
 int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
@@ -793,9 +811,7 @@ int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
             fprintf(targetFile, "s.s $f%d, 0($sp)\n", paraNode->valPlace.place.regNum);
 
         //both int & float require 4 bytes
-        int intRegNum = getReg(GR.regManager, targetFile);
-        fprintf(targetFile, "li $%d, %d\n", intRegNum, 4);
-        fprintf(targetFile, "add $sp, $sp, $%d\n", intRegNum);
+        fprintf(targetFile, "addi $sp, $sp, -4\n");
     }
 
     return 1 + leftNumOfPara;
