@@ -44,11 +44,11 @@ void openScope(SymbolTableTree* pThis, int phase){
     pThis->currentLevel += 1;
     if(pThis->lastChildScope == NULL){
         pThis->currentInnerScope = pThis->currentInnerScope->child;
-        pThis->lastChildScope == NULL;
+        pThis->lastChildScope = NULL;
     }
     else{
         pThis->currentInnerScope = pThis->lastChildScope->rightSibling;
-        pThis->lastChildScope == NULL;
+        pThis->lastChildScope = NULL;
     }
 }
 

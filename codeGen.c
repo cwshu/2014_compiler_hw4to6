@@ -108,7 +108,7 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
                     
                     int floatRegNum = getReg(GR.FPRegManager, targetFile);
                     float constValue = variableNode->child->semantic_value.const1->const_u.fval;
-                    fprintf(targetFile, "l.s $f%d, %f\n", floatRegNum, constValue);
+                    fprintf(targetFile, "li.s $f%d, %f\n", floatRegNum, constValue);
                     fprintf(targetFile, "s.s $f%d, %d($fp)\n", floatRegNum, -1*GR.stackTop);
                 }
             }
@@ -430,20 +430,28 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     /* assignment */
     ExpValPlace* lvaluePlace = &(lvalueNode->valPlace);
     if(lvalueType == INT_TYPE){
+        /* lvalue = rvalue */
         if(lvaluePlace->kind == STACK_TYPE)
             fprintf(targetFile, "sw $%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
         else if(lvaluePlace->kind == GLOBAL_TYPE)
             fprintf(targetFile, "sw $%d, %s+%d\n", rvalueRegNum, 
               lvaluePlace->place.data.label, lvaluePlace->place.data.offset);
-        releaseReg(GR.regManager, rvalueRegNum);
+        // no release, let ExprNode(=) use this register
+        // releaseReg(GR.regManager, rvalueRegNum);
+        /* return rvalue at ExprNode(=) */
+        setPlaceOfASTNodeToReg(assignmentNode, INT_TYPE, rvalueRegNum);
     }
     if(lvalueType == FLOAT_TYPE){
+        /* lvalue = rvalue */
         if(lvaluePlace->kind == STACK_TYPE)
-            fprintf(targetFile, "s.s $%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
+            fprintf(targetFile, "s.s $f%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
         else if(lvaluePlace->kind == GLOBAL_TYPE)
             fprintf(targetFile, "s.s $f%d, %s+%d\n", rvalueRegNum,
               lvaluePlace->place.data.label, lvaluePlace->place.data.offset);
-        releaseReg(GR.FPRegManager, rvalueRegNum);
+        // no release, let ExprNode(=) use this register
+        // releaseReg(GR.FPRegManager, rvalueRegNum);
+        /* return rvalue at ExprNode(=) */
+        setPlaceOfASTNodeToReg(assignmentNode, FLOAT_TYPE, rvalueRegNum);
     }
 }
 
@@ -649,7 +657,7 @@ int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int 
      * or(true, false):
      *     j true if exp1 ( genShortRelExpr(exp1, true, exp1False) )
      *     exp1False:
-     *     j true if exp2 ( genShortRelExpr(exp2, true, false`) )
+     *     j true if exp2 ( genShortRelExpr(exp2, true, false) )
      *     j false
      */
 
@@ -689,7 +697,7 @@ int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int 
             if(!isShortEval) /* j false if not exp2 */
                 _normalEval(targetFile, exprNode->child->rightSibling, falseLabel, FALSE_JUMP);
 
-            fprintf(targetFile, "j L%d:\n", trueLabel);
+            fprintf(targetFile, "j L%d\n", trueLabel);
         }
         if(binaryOp == BINARY_OP_OR){
             int child1FalseLabel = GR.labelCounter++;
@@ -708,7 +716,7 @@ int genShortRelExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode, int 
             if(!isShortEval) /* j true if exp2 */
                 _normalEval(targetFile, exprNode->child->rightSibling, trueLabel, TRUE_JUMP);
 
-            fprintf(targetFile, "j L%d:\n", falseLabel);
+            fprintf(targetFile, "j L%d\n", falseLabel);
         }
     }
 }
@@ -824,6 +832,7 @@ void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode){
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
     /* return register or FP register of expression value(from exprNode->valPlace).
+     * return -1 if AST_NODE doesn't have place.
      * For value in memory, load it to register */
     if(exprNode->valPlace.kind == REG_TYPE){
         return exprNode->valPlace.place.regNum;
