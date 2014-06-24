@@ -168,8 +168,8 @@ void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
      *                      and processing Decl_list + Stmt_list
      */
     AST_NODE* blockNode = paraListNode->rightSibling;
-    openScope(symbolTable, BUILD);
-    /* add function parameter into symboltable*/
+    openScope(symbolTable, BUILD, funcName);
+    /* add function parameter into symboltable */
     AST_NODE* funcParaNode = paraListNode->child;
     while(funcParaNode){
         processVariableDecl(symbolTable, funcParaNode);
@@ -417,7 +417,7 @@ void checkStmt(STT* symbolTable, AST_NODE* StmtNode, char* funcName){
 
 void checkBlock(STT *symbolTable, AST_NODE* blockNode, char* funcName){
 
-    openScope(symbolTable, BUILD);
+    openScope(symbolTable, BUILD, NULL);
 
     AST_NODE* child = blockNode->child;
     while( child ){

@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 #include "header.h"
 #include "symbolTable.h"
 
@@ -21,17 +22,25 @@ void malloc_strncpy(char** a, char* b, int len){
 SymbolTableTree* createSymbolTableTree(){
     /* constructor of SymbolTableTree, initial global symbolTable */
     SymbolTableTree* tree = malloc(sizeof(SymbolTableTree));
-    tree->root = createSymbolTableNode();
+    tree->root = createSymbolTableNode(0, NULL);
     tree->currentLevel = 0; // global
     tree->currentInnerScope = tree->root;
     tree->lastChildScope = NULL;
     return tree;
 }
 
-void openScope(SymbolTableTree* pThis, int phase){
+void openScope(SymbolTableTree* pThis, int phase, char* funcName){
     /* Entering new scope(new block), add new symbol table. */
     if(phase == BUILD){
-        SymbolTableNode* newTable = createSymbolTableNode();
+        SymbolTableNode* newTable = NULL;
+        if(pThis->currentLevel == 0){
+            /* is global scope now, open a function scope */
+            assert(funcName != NULL);
+            newTable = createSymbolTableNode(1, funcName);
+        }
+        else{
+            newTable = createSymbolTableNode(0, NULL);
+        }
 
         if(pThis->lastChildScope == NULL)
             pThis->currentInnerScope->child = newTable;
@@ -50,11 +59,21 @@ void openScope(SymbolTableTree* pThis, int phase){
         pThis->currentInnerScope = pThis->lastChildScope->rightSibling;
         pThis->lastChildScope = NULL;
     }
+
+    if(pThis->currentLevel == 1){
+        /* entering function, add function name */
+        assert(pThis->currentInnerScope->funcName != NULL);
+        pThis->currentInsideFuncName = pThis->currentInnerScope->funcName;
+    }
 }
 
 void closeScope(SymbolTableTree* pThis){
     /* exit one scope, jump to previous symbol table */
     pThis->currentLevel -= 1;
+    if(pThis->currentLevel == 0){
+        /* leave function scope, return to global scope */
+        pThis->currentInsideFuncName = NULL;
+    }
     pThis->lastChildScope = pThis->currentInnerScope;
     pThis->currentInnerScope = pThis->currentInnerScope->parent;
 }
@@ -68,6 +87,10 @@ void closeGlobalScope(SymbolTableTree* pThis){
 
 void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry){
     addSymbolInTableByEntry(pThis->currentInnerScope, entry);
+}
+
+char* insideFuncName(SymbolTableTree* pThis){
+    return pThis->currentInsideFuncName;
 }
 
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name){
@@ -101,7 +124,7 @@ SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name){
 }
 
 /* SymbolTableNode method definition */
-SymbolTableNode* createSymbolTableNode(){
+SymbolTableNode* createSymbolTableNode(int isFuncScope, char* funcName){
     /* constructor of SymbolTable */
     SymbolTableNode* symTable = malloc(sizeof(SymbolTableNode));
     symTable->parent = NULL;
@@ -111,6 +134,8 @@ SymbolTableNode* createSymbolTableNode(){
     for(i=0; i<TABLE_SIZE; i++){
         symTable->symbolTable[i] = NULL;
     }
+    symTable->isFuncScope = isFuncScope;
+    symTable->funcName = funcName;
 }
 
 void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry){

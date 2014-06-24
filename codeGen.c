@@ -14,7 +14,7 @@ void _normalEval(FILE* targetFile, AST_NODE* childNode, int jumpLabel, int jumpC
 /* jumpCond = TRUE_JUMP or FALSE_JUMP */
 #define TRUE_JUMP 1
 #define FALSE_JUMP 0
-int _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, ParameterNode* thisParameter);
+void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, ParameterNode* thisParameter);
 
 /* function definition */
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
@@ -134,7 +134,7 @@ void genFuncDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNode){
      *             epilogue & closeScope
      */
 
-    openScope(symbolTable, USE);
+    openScope(symbolTable, USE, NULL);
     /* set parameters' place 
      * the 1st arg is fp+8, 2nd is fp+12 ... 
      * stackOffset = -8, -12 ... etc
@@ -251,7 +251,7 @@ void genStmt(FILE* targetFile, STT* symbolTable, AST_NODE* stmtNode, char* funcN
 }
 
 void genBlock(FILE* targetFile, STT* symbolTable, AST_NODE* blockNode, char* funcName){
-    openScope(symbolTable, USE);
+    openScope(symbolTable, USE, NULL);
 
     AST_NODE* blockChild = blockNode->child;
     while(blockChild){
@@ -824,12 +824,12 @@ int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
     return paraNum;
 }
 
-int _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, 
-  ParameterNode* thisParameter, int paraNum){
+void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, 
+  ParameterNode* thisParameter){
 
     // recursive call
     if( paraNode->rightSibling )
-        leftNumOfPara = _genParaList(targetFile, symbolTable, paraNode->rightSibling, thisParameter->next);
+        _genParaList(targetFile, symbolTable, paraNode->rightSibling, thisParameter->next);
     
     // check if parameter is array
     int dimension = 0;
@@ -882,8 +882,6 @@ int _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode,
     }
     //both int & float & array require 4 bytes
     fprintf(targetFile, "addi $sp, $sp, -4\n");
-
-    return 1 + leftNumOfPara;
 }
 
 void genProcessFuncReturnValue(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){

@@ -24,19 +24,21 @@ struct SymbolTableTree{
     int currentLevel; /* depth of current inner symbolTable(scope), 0 means global */
     SymbolTableNode* currentInnerScope;
     SymbolTableNode* lastChildScope; /* the table of last closeScope */
+    char* currentInsideFuncName;
 };
 /* methods */
 SymbolTableTree* createSymbolTableTree();
-void openScope(SymbolTableTree* pThis, int phase);
+void openScope(SymbolTableTree* pThis, int phase, char* funcName);
 void closeScope(SymbolTableTree* pThis);
 void addSymbolByEntry(SymbolTableTree* pThis, SymbolTableEntry* entry);
+char* insideFuncName(SymbolTableTree* pThis);
 SymbolTableEntry* lookupSymbol(SymbolTableTree* pThis, char* name);
 SymbolTableEntry* lookupSymbolWithLevel(SymbolTableTree* pThis, char* name, int* pLevel);
+SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
     /* NULL if name doesn't exist 
      * else return Entry
      */
 
-SymbolTableEntry* lookupSymbolCurrentScope(SymbolTableTree* pThis, char* name);
 
 /* SymbolTableNode and methods prototype */
 
@@ -52,10 +54,12 @@ struct SymbolTableNode{
     SymbolTableNode* rightSibling;
 
     /* Symbol Table */
+    int isFuncScope;
+    char* funcName;
     SymbolTableEntry* symbolTable[TABLE_SIZE];
 };
 /* methods */
-SymbolTableNode* createSymbolTableNode();
+SymbolTableNode* createSymbolTableNode(int isFuncScope, char* funcName);
 void addSymbolInTableByEntry(SymbolTableNode* pThis, SymbolTableEntry* entry);
 SymbolTableEntry* lookupSymbolInTable(SymbolTableNode* pThis, char* name);
 // int hashFunction(char* str);

@@ -16,4 +16,6 @@ cscope.po.out
 *.gv
 *.png
 
-pattern/*.asm
+*.s
+*.asm
+*.tar.bz2
