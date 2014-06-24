@@ -14,6 +14,7 @@ void _normalEval(FILE* targetFile, AST_NODE* childNode, int jumpLabel, int jumpC
 /* jumpCond = TRUE_JUMP or FALSE_JUMP */
 #define TRUE_JUMP 1
 #define FALSE_JUMP 0
+int _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, ParameterNode* thisParameter);
 
 /* function definition */
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
@@ -813,21 +814,33 @@ void genFuncCall(FILE* targetFile, STT* symbolTable, AST_NODE* funcCallNode){
 }
 
 int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
-    
-    int leftNumOfPara = 0;
+    AST_NODE* funcNameNode = paraNode->parent->leftmostSibling;
+    char* funcName = funcNameNode->semantic_value.identifierSemanticValue.identifierName;
+    SymbolTableEntry* funcEntry = lookupSymbol(symbolTable, funcName);
+    ParameterNode* funcParaList = funcEntry->functionParameterList;
+
+    int paraNum = countRightSibling(paraNode);
+    _genParaList(targetFile, symbolTable, paraNode, funcParaList);
+    return paraNum;
+}
+
+int _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, 
+  ParameterNode* thisParameter, int paraNum){
 
     // recursive call
-    if(paraNode->rightSibling)
-        leftNumOfPara = genParaList(targetFile, symbolTable, paraNode->rightSibling);
+    if( paraNode->rightSibling )
+        leftNumOfPara = _genParaList(targetFile, symbolTable, paraNode->rightSibling, thisParameter->next);
     
     // check if parameter is array
     int dimension = 0;
+    int stackOffsetToThisFP = 0;
     if( paraNode->nodeType == IDENTIFIER_NODE ){
         
         char* varName = paraNode->semantic_value.identifierSemanticValue.identifierName;
         SymbolTableEntry* entry = lookupSymbol(symbolTable, varName);
         TypeDescriptor* type = entry->type;
         dimension = type->dimension;
+        stackOffsetToThisFP = entry->stackOffset;
     }
 
     if( dimension != 0 ){
@@ -840,15 +853,35 @@ int genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode){
     else{ 
         genExpr(targetFile, symbolTable, paraNode);
         int regNum = getExprNodeReg(targetFile, paraNode);
-        
-        if( paraNode->valPlace.dataType == INT_TYPE )
-            fprintf(targetFile, "sw $%d, 0($sp)\n", paraNode->valPlace.place.regNum);
-        else if( paraNode->valPlace.dataType == FLOAT_TYPE )
-            fprintf(targetFile, "s.s $f%d, 0($sp)\n", paraNode->valPlace.place.regNum);
+        DATA_TYPE funcParaType = thisParameter->type->primitiveType;
 
-        //both int & float require 4 bytes
-        fprintf(targetFile, "addi $sp, $sp, -4\n");
+        if( funcParaType == INT_TYPE ){
+            if( paraNode->valPlace.dataType != funcParaType ){
+                /* type conversion of parameter(float to int) */
+                int intRegNum = getReg(GR.regManager, targetFile);
+                genFloatToInt(targetFile, intRegNum, regNum);
+                releaseReg(GR.FPRegManager, regNum);
+                regNum = intRegNum;
+            }
+
+            fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+            releaseReg(GR.regManager, regNum);
+        }
+        else if( funcParaType == FLOAT_TYPE ){
+            if( paraNode->valPlace.dataType != funcParaType ){
+                /* type conversion of parameter(int to float) */
+                int floatRegNum = getReg(GR.FPRegManager, targetFile);
+                genIntToFloat(targetFile, floatRegNum, regNum);
+                releaseReg(GR.regManager, regNum);
+                regNum = floatRegNum;
+            }
+
+            fprintf(targetFile, "s.s $f%d, 0($sp)\n", regNum);
+            releaseReg(GR.FPRegManager, regNum);
+        }
     }
+    //both int & float & array require 4 bytes
+    fprintf(targetFile, "addi $sp, $sp, -4\n");
 
     return 1 + leftNumOfPara;
 }
