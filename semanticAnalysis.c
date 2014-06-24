@@ -19,7 +19,7 @@ void addBuiltinFunction(STT* symbolTable){
     int readNumOfPara = 0;
 
     SymbolTableEntry* readEntry = createSymbolTableEntry(readFuncName, readKind, 
-   readReturnType, readNumOfPara, NULL); 
+      readReturnType, readNumOfPara, NULL); 
 
     char* freadFuncName = malloc(10 * sizeof(char));
     strncpy(freadFuncName, "fread", 6);
@@ -767,7 +767,7 @@ DATA_TYPE getTypeOfExpr(STT* symbolTable, AST_NODE* exprNode){
                 return INT_TYPE;
             }
             DATA_TYPE child1type = getTypeOfExpr(symbolTable, child);
-            DATA_TYPE child2type = getTypeOfExpr(symbolTable, child);
+            DATA_TYPE child2type = getTypeOfExpr(symbolTable, child->rightSibling);
             if(child1type == FLOAT_TYPE || child2type == FLOAT_TYPE)
                 return FLOAT_TYPE;
             return INT_TYPE;

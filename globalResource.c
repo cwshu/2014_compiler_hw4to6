@@ -16,7 +16,10 @@ void GRinit(struct GlobalResource* GR){
 }
 
 void GRfin(struct GlobalResource* GR){
-    free(GR->constStrings);
-    free(GR->regManager);
-    free(GR->FPRegManager);
+    if(GR->constStrings)
+        free(GR->constStrings);
+    if(GR->regManager);
+        free(GR->regManager);
+    if(GR->FPRegManager);
+        free(GR->FPRegManager);
 }

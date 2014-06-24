@@ -414,11 +414,27 @@ void genReturnStmt(FILE* targetFile, STT* symbolTable, AST_NODE* returnNode, cha
 
     if(returnType == INT_TYPE){
         int retRegNum = getExprNodeReg(targetFile, returnNode->child);
+        if(returnType != returnNode->child->valPlace.dataType){
+            /* expr is float, conversion to int type */
+            int intRegNum = getReg(GR.regManager, targetFile);
+            genFloatToInt(targetFile, intRegNum, retRegNum);
+            releaseReg(GR.FPRegManager, retRegNum);
+            retRegNum = intRegNum;
+        }
+
         fprintf(targetFile, "move $%s, $%d\n", INT_RETURN_REG, retRegNum);
         releaseReg(GR.regManager, retRegNum);
     }
     else if(returnType == FLOAT_TYPE){
         int retRegNum = getExprNodeReg(targetFile, returnNode->child);
+        if(returnType != returnNode->child->valPlace.dataType){
+            /* expr is int, conversion to float type */
+            int floatRegNum = getReg(GR.FPRegManager, targetFile); 
+            genIntToFloat(targetFile, floatRegNum, retRegNum);
+            releaseReg(GR.regManager, retRegNum);
+            retRegNum = floatRegNum;
+        }
+
         fprintf(targetFile, "mov.s $%s, $f%d\n", FLOAT_RETURN_REG, retRegNum);
         releaseReg(GR.FPRegManager, retRegNum);
     }
@@ -603,6 +619,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             int child1RegNum, child2RegNum;
             if(type1 != type2){
                 /* INT op FLOAT => FLOAT op FLOAT */
+                type = FLOAT_TYPE;
                 if(type1 == INT_TYPE){
                     int child1OriRegNum = getExprNodeReg(targetFile, exprNode->child);
                     child1RegNum = getReg(GR.FPRegManager, targetFile);
@@ -973,6 +990,10 @@ int getReg(RegisterManager* pThis, FILE* targetFile){
 void useReg(RegisterManager* pThis, int regNum, AST_NODE* nodeUseThisReg){
     /* AST_NODE use register, build link from register Manager to AST_NODE */
     int regIndex = regNum - pThis->firstRegNum;
+    /* border check */
+    assert(regIndex >= 0);
+    assert(regIndex <= pThis->numOfReg);
+
     pThis->regUser[regIndex] = nodeUseThisReg;
 }
 
@@ -980,6 +1001,10 @@ void releaseReg(RegisterManager* pThis, int regNum){
     /* release used register to free register.
      * break link from Register Manager to AST_NODE */
     int regIndex = regNum - pThis->firstRegNum;
+    /* border check */
+    assert(regIndex >= 0);
+    assert(regIndex <= pThis->numOfReg);
+
     pThis->regFull[regIndex] = 0;
     pThis->regUser[regIndex] = NULL;
 }
@@ -1008,6 +1033,10 @@ int findEarlestUsedReg(RegisterManager* pThis){
 
 void spillReg(RegisterManager* pThis, int regIndex, FILE* targetFile){
     /* spill value of register to the runtime stack, then release this register */
+    /* border check */
+    assert(regIndex >= 0);
+    assert(regIndex <= pThis->numOfReg);
+
     int regNum = regIndex + pThis->firstRegNum;
     if(pThis->regUser[regIndex]){
         /* if AST_NODE (register user) exist */
