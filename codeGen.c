@@ -967,7 +967,9 @@ int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode){
     int offsetOfEachDimension[MAX_ARRAY_DIMENSION] = {0};
 
     int dimension = symbolEntry->type->dimension - 1;
-    offsetOfEachDimension[dimension] = 4;
+
+    if(dimension >= 0)
+        offsetOfEachDimension[dimension] = 4;
     while(dimension > 0){
         offsetOfEachDimension[dimension - 1] = offsetOfEachDimension[dimension];
         offsetOfEachDimension[dimension - 1] *= symbolEntry->type->sizeOfEachDimension[dimension];
