@@ -79,7 +79,7 @@ struct SymbolTableEntry{
     ParameterNode* functionParameterList; /* Non-NULL if kind == FUNCTION */
 
     /* variable address */
-    int stackOffset;
+    ExpValPlace place;
 
     /* Linked-List in Hash table */
     SymbolTableEntry* next;
@@ -89,6 +89,12 @@ struct SymbolTableEntry{
 SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind, 
   TypeDescriptor* type, int numOfPara, ParameterNode* functionParameterList); 
 // void addOffset(SymbolTableEntry entry, int offset);
+
+/* SymbolTableEntry place */
+void setPlaceOfSymTableToReg(SymbolTableEntry *pThis, int regNum);
+void setPlaceOfSymTableToStack(SymbolTableEntry *pThis, int stackOffset);
+void setPlaceOfSymTableToGlobalData(SymbolTableEntry *pThis, char* label, int offset);
+void setPlaceOfSymTableToIndirectAddr(SymbolTableEntry *pThis, int offset1, int offset2);
 
 /* TypeDescriptor and methods prototype */
 

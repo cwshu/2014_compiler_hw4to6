@@ -187,8 +187,14 @@ typedef enum ExpValPlaceKind{
     NULL_TYPE,
     REG_TYPE,
     STACK_TYPE,
-    GLOBAL_TYPE
+    GLOBAL_TYPE,
+    INDIRECT_ADDRESS
 } ExpValPlaceKind;
+
+typedef struct IndirectAddr{
+    int offset1;
+    int offset2;
+} IndirectAddr;
 
 struct ExpValPlace{
     DATA_TYPE dataType;
@@ -197,12 +203,14 @@ struct ExpValPlace{
         int regNum;
         int stackOffset;
         GlobalVarPlace data;
+        IndirectAddr inAddr;
     } place;
 };
 
 void setPlaceOfASTNodeToReg(AST_NODE *pThis, DATA_TYPE primiType, int regNum);
 void setPlaceOfASTNodeToStack(AST_NODE *pThis, DATA_TYPE primiType, int stackOffset);
 void setPlaceOfASTNodeToGlobalData(AST_NODE *pThis, DATA_TYPE primiType, char* label, int offset);
+void setPlaceOfASTNodeToIndirectAddr(AST_NODE *pThis, DATA_TYPE primiType, int offset1, int offset2);
 
 /*** AST_NODE ***/
 struct AST_NODE {

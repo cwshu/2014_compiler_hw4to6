@@ -183,8 +183,40 @@ SymbolTableEntry* createSymbolTableEntry(char* name, SymbolTableEntryKind kind,
     entry->numOfParameters = numOfPara;
     entry->functionParameterList = functionParameterList;
     entry->next = NULL;
+    /* place */
+    entry->place.kind = NULL_TYPE;
 }
 
+/* SymbolTableEntry place */
+void setPlaceOfSymTableToReg(SymbolTableEntry *pThis, int regNum){
+    /* let SymbolTableEntry's place pointed to register */
+    pThis->place.dataType = pThis->type->primitiveType;
+    pThis->place.kind = REG_TYPE;
+    pThis->place.place.regNum = regNum;
+}
+
+void setPlaceOfSymTableToStack(SymbolTableEntry *pThis, int stackOffset){
+    /* let SymbolTableEntry's place pointed to stack */
+    pThis->place.dataType = pThis->type->primitiveType;
+    pThis->place.kind = STACK_TYPE;
+    pThis->place.place.stackOffset = stackOffset;
+}
+
+void setPlaceOfSymTableToGlobalData(SymbolTableEntry *pThis, char* label, int offset){
+    /* let SymbolTableEntry's place pointed to global memory address */
+    pThis->place.dataType = pThis->type->primitiveType;
+    pThis->place.kind = GLOBAL_TYPE;
+    pThis->place.place.data.label = label;
+    pThis->place.place.data.offset = offset;
+}
+
+void setPlaceOfSymTableToIndirectAddr(SymbolTableEntry *pThis, int offset1, int offset2){
+    /* let SymbolTableEntry's place pointed to stack */
+    pThis->place.dataType = pThis->type->primitiveType;
+    pThis->place.kind = INDIRECT_ADDRESS;
+    pThis->place.place.inAddr.offset1 = offset1;
+    pThis->place.place.inAddr.offset2 = offset2;
+}
 /* TypeDescriptor method definition */
 TypeDescriptor* createScalarTypeDescriptor(DATA_TYPE primitiveType){
     /* constructor of (scalar, typedef) SymbolTableEntry */

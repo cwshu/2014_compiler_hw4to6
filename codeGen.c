@@ -74,6 +74,8 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
         }
 
         if(kind == GLOBAL){
+            setPlaceOfSymTableToGlobalData(entry, entry->name, 0);
+
             if(type->dimension != 0)
                 fprintf(targetFile, "%s: .space %d\n", entry->name, varSize);
             else if(type->primitiveType == INT_TYPE){
@@ -92,7 +94,7 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
             }
         }
         else if(kind == LOCAL){
-            entry->stackOffset = GR.stackTop + 4;
+            setPlaceOfSymTableToStack(entry, GR.stackTop + 4);
             GR.stackTop += varSize;
 
             // check if initialization required
@@ -103,14 +105,16 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
                     int intRegNum = getReg(GR.regManager, targetFile);
                     int constValue = variableNode->child->semantic_value.const1->const_u.intval;
                     fprintf(targetFile, "li $%d, %d\n", intRegNum, constValue);
-                    fprintf(targetFile, "sw $%d, %d($fp)\n", intRegNum, -1*GR.stackTop);
+                    fprintf(targetFile, "sw $%d, %d($fp)\n", intRegNum, -1*GR.stackTop); // initialize to stack.
+                    releaseReg(GR.regManager, intRegNum);
                 }
                 else if( type->primitiveType == FLOAT_TYPE ){
                     
                     int floatRegNum = getReg(GR.FPRegManager, targetFile);
                     float constValue = variableNode->child->semantic_value.const1->const_u.fval;
                     fprintf(targetFile, "li.s $f%d, %f\n", floatRegNum, constValue);
-                    fprintf(targetFile, "s.s $f%d, %d($fp)\n", floatRegNum, -1*GR.stackTop);
+                    fprintf(targetFile, "s.s $f%d, %d($fp)\n", floatRegNum, -1*GR.stackTop); // initialize to stack.
+                    releaseReg(GR.FPRegManager, floatRegNum);
                 }
             }
         }
@@ -163,7 +167,7 @@ void genFuncHead(FILE* targetFile, char* funcName){
 }
 
 void setParaListStackOffset(STT* symbolTable, AST_NODE* paraListNode){
-    /* set parameters' place 
+    /* set parameters' place in symbol table
      * the 1st arg is fp+8, 2nd is fp+12 ... 
      * stackOffset = -8, -12 ... etc
      */
@@ -172,7 +176,14 @@ void setParaListStackOffset(STT* symbolTable, AST_NODE* paraListNode){
     while(funcParaNode){
         char* varName = funcParaNode->child->rightSibling->semantic_value.identifierSemanticValue.identifierName;
         SymbolTableEntry* varEntry = lookupSymbol(symbolTable, varName);
-        varEntry->stackOffset = stackOffset;
+
+        if(varEntry->type->dimension == 0){
+            setPlaceOfSymTableToStack(varEntry, stackOffset);
+        }
+        else{
+            /* is array parameter, child isn't NULL */
+            setPlaceOfSymTableToIndirectAddr(varEntry, stackOffset, 0);
+        }
 
         funcParaNode = funcParaNode->rightSibling;
         stackOffset -= -4;
@@ -566,10 +577,21 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         int arrayOffset = computeArrayOffset(entry, exprNode);
 
         if(scope == LOCAL){
-            if(type == INT_TYPE)
-                setPlaceOfASTNodeToStack(exprNode, INT_TYPE, entry->stackOffset + arrayOffset);
-            else if(type == FLOAT_TYPE)
-                setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, entry->stackOffset + arrayOffset);
+            if(entry->place.kind == INDIRECT_ADDRESS){
+                int stackOffset = entry->place.place.inAddr.offset1;
+                if(type == INT_TYPE)
+                    setPlaceOfASTNodeToIndirectAddr(exprNode, INT_TYPE, stackOffset, arrayOffset);
+                else if(type == FLOAT_TYPE)
+                    setPlaceOfASTNodeToIndirectAddr(exprNode, FLOAT_TYPE, stackOffset, arrayOffset);
+            
+            }
+            else{
+                int stackOffset = entry->place.place.stackOffset;
+                if(type == INT_TYPE)
+                    setPlaceOfASTNodeToStack(exprNode, INT_TYPE, stackOffset + arrayOffset);
+                else if(type == FLOAT_TYPE)
+                    setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, stackOffset + arrayOffset);
+            }
         }
 
         if(scope == GLOBAL){
@@ -625,6 +647,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                     int child1OriRegNum = getExprNodeReg(targetFile, exprNode->child);
                     child1RegNum = getReg(GR.FPRegManager, targetFile);
                     genIntToFloat(targetFile, child1RegNum, child1OriRegNum);
+                    releaseReg(GR.regManager, child1OriRegNum);
 
                     child2RegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
                 }
@@ -632,6 +655,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
                     int child2OriRegNum = getExprNodeReg(targetFile, exprNode->child->rightSibling);
                     child2RegNum = getReg(GR.FPRegManager, targetFile);
                     genIntToFloat(targetFile, child2RegNum, child2OriRegNum);
+                    releaseReg(GR.FPRegManager, child2OriRegNum);
 
                     child1RegNum = getExprNodeReg(targetFile, exprNode->child);
                 }
@@ -833,14 +857,12 @@ void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode,
     
     // check if parameter is array
     int dimension = 0;
-    int stackOffsetToThisFP = 0;
     if( paraNode->nodeType == IDENTIFIER_NODE ){
         
         char* varName = paraNode->semantic_value.identifierSemanticValue.identifierName;
         SymbolTableEntry* entry = lookupSymbol(symbolTable, varName);
         TypeDescriptor* type = entry->type;
         dimension = type->dimension;
-        stackOffsetToThisFP = entry->stackOffset;
     }
 
     if( dimension != 0 ){
@@ -849,6 +871,41 @@ void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode,
            LOCAL  -> may access non-local array
                      non-local array address relatives to non-local fp
            HAVE NOT IMPLEMENTED */
+
+        char* varName = paraNode->semantic_value.identifierSemanticValue.identifierName;
+        int level, scope = LOCAL;
+        SymbolTableEntry* entry = lookupSymbolWithLevel(symbolTable, varName, &level);
+        if(level == 0)
+            scope = GLOBAL;
+        
+        /* passing array address in array parameter */
+        int regNum = getReg(GR.regManager, targetFile);
+        int arrayOffset = computeArrayOffset(entry, paraNode);
+
+        if(scope == GLOBAL){
+            /* pass global array address in stack(for indirect address) */
+            fprintf(targetFile, "li $%d, %s+%d", regNum, varName, arrayOffset);
+            fprintf(targetFile, "sw $%d, 0($sp)", regNum);
+        }
+        else if(scope == LOCAL){
+            if(entry->place.kind == STACK_TYPE){
+                /* pass local array address in stack(for indirect address) */
+                int stackOffset = entry->place.place.stackOffset;
+                fprintf(targetFile, "addi $%d, $fp, %d", regNum, stackOffset);
+                fprintf(targetFile, "addi $%d, $%d, %d", regNum, regNum, arrayOffset);
+                fprintf(targetFile, "sw $%d, 0($sp)", regNum);
+            }
+            else if(entry->place.kind == INDIRECT_ADDRESS){
+                /* pass indirect address array address in stack(for indirect address) */
+                int stackOffset = entry->place.place.inAddr.offset1;
+                fprintf(targetFile, "lw $%d, %d($fp)", regNum, stackOffset);
+                fprintf(targetFile, "addi $%d, $%d, %d", regNum, regNum, arrayOffset);
+                fprintf(targetFile, "sw $%d, 0($sp)", regNum);
+            }
+         
+        }
+
+        releaseReg(GR.regManager, regNum);
     }
     else{ 
         genExpr(targetFile, symbolTable, paraNode);
@@ -954,12 +1011,36 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
             return regNum;
         }
     }
+    else if(exprNode->valPlace.kind == INDIRECT_ADDRESS){
+        int offset1 = exprNode->valPlace.place.inAddr.offset1;
+        int offset2 = exprNode->valPlace.place.inAddr.offset2;
+        int tempRegNum = getReg(GR.regManager, targetFile);
+        fprintf(targetFile, "lw, $%d, %d($fp)\n", tempRegNum, -1*offset1);
+
+        int regNum = 0;
+        if(exprNode->valPlace.dataType == INT_TYPE){
+            regNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $%d, %d($%d)\n", regNum, offset2, tempRegNum);
+            useReg(GR.regManager, regNum, exprNode);
+            setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
+        }
+        else if(exprNode->valPlace.dataType == FLOAT_TYPE){
+            regNum = getReg(GR.FPRegManager, targetFile);
+            fprintf(targetFile, "l.s $f%d, %d($%d)\n", regNum, offset2, tempRegNum);
+            useReg(GR.FPRegManager, regNum, exprNode);
+            setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
+        }
+
+        releaseReg(GR.regManager, tempRegNum);
+
+        return regNum;
+    }
 
     return -1;
 }
 
 int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode){
-    /* compute used Node's array offset 
+    /* compute used Node's array offset, use symbol table type
      * example, a[5] for int a[10], offset = 5*sizeof(int) = 20
      * example, a[5][6] for int a[10][10], offset = (50+6)*sizeof(int) = 224
      */
