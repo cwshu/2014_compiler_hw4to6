@@ -38,7 +38,8 @@ void genProcessIntReturnValue(FILE* targetFile, AST_NODE* exprNode);
 void genProcessFloatReturnValue(FILE* targetFile, AST_NODE* exprNode);
 
 int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode);
-int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode);
+ArrayIndexKind computeArrayOffset(FILE* targetFile, STT* symbolTable, SymbolTableEntry* symbolEntry, 
+  AST_NODE* usedNode, int* staticOffset);
 
 /* spec-dependent constant */
 #define INT_RETURN_REG "v0"

@@ -180,7 +180,7 @@ typedef struct CON_Type{
 /*** AST place ***/
 typedef struct GlobalVarPlace {
     char* label;
-    int offset;
+    int offset; /* if array is dynamic index, offset is meaningless */
 } GlobalVarPlace;
 
 typedef enum ExpValPlaceKind{
@@ -188,17 +188,23 @@ typedef enum ExpValPlaceKind{
     REG_TYPE,
     STACK_TYPE,
     GLOBAL_TYPE,
-    INDIRECT_ADDRESS
+    INDIRECT_ADDRESS,
 } ExpValPlaceKind;
+
+typedef enum ArrayIndexKind{
+    STATIC_INDEX,
+    DYNAMIC_INDEX
+} ArrayIndexKind;
 
 typedef struct IndirectAddr{
     int offset1;
-    int offset2;
+    int offset2; /* if array is dynamic index, offset2 is meaningless */
 } IndirectAddr;
 
 struct ExpValPlace{
     DATA_TYPE dataType;
     ExpValPlaceKind kind;
+    ArrayIndexKind arrIdxKind;
     union {
         int regNum;
         int stackOffset;
@@ -208,9 +214,12 @@ struct ExpValPlace{
 };
 
 void setPlaceOfASTNodeToReg(AST_NODE *pThis, DATA_TYPE primiType, int regNum);
-void setPlaceOfASTNodeToStack(AST_NODE *pThis, DATA_TYPE primiType, int stackOffset);
-void setPlaceOfASTNodeToGlobalData(AST_NODE *pThis, DATA_TYPE primiType, char* label, int offset);
-void setPlaceOfASTNodeToIndirectAddr(AST_NODE *pThis, DATA_TYPE primiType, int offset1, int offset2);
+void setPlaceOfASTNodeToStack(AST_NODE *pThis, DATA_TYPE primiType, 
+  int stackOffset, ArrayIndexKind arrIdxKind);
+void setPlaceOfASTNodeToGlobalData(AST_NODE *pThis, DATA_TYPE primiType,
+  char* label, int offset, ArrayIndexKind arrIdxKind);
+void setPlaceOfASTNodeToIndirectAddr(AST_NODE *pThis, DATA_TYPE primiType, 
+  int offset1, int offset2, ArrayIndexKind arrIdxKind);
 
 /*** AST_NODE ***/
 struct AST_NODE {

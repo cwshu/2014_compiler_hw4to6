@@ -15,6 +15,7 @@ void _normalEval(FILE* targetFile, AST_NODE* childNode, int jumpLabel, int jumpC
 #define TRUE_JUMP 1
 #define FALSE_JUMP 0
 void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode, ParameterNode* thisParameter);
+int isAllConstIndex(AST_NODE* headNode);
 
 /* function definition */
 void codeGen(FILE* targetFile, AST_NODE* prog, STT* symbolTable){
@@ -94,11 +95,11 @@ void genVariableDecl(FILE* targetFile, STT* symbolTable, AST_NODE* declarationNo
             }
         }
         else if(kind == LOCAL){
-            setPlaceOfSymTableToStack(entry, GR.stackTop + 4);
             GR.stackTop += varSize;
+            setPlaceOfSymTableToStack(entry, GR.stackTop);
 
             // check if initialization required
-            if( variableNode->child ){ // need to initialize
+            if( variableNode->semantic_value.identifierSemanticValue.kind == WITH_INIT_ID ){ // need to initialize
                 
                 if( type->primitiveType == INT_TYPE ){
                     
@@ -182,11 +183,11 @@ void setParaListStackOffset(STT* symbolTable, AST_NODE* paraListNode){
         }
         else{
             /* is array parameter, child isn't NULL */
-            setPlaceOfSymTableToIndirectAddr(varEntry, stackOffset, 0);
+            setPlaceOfSymTableToIndirectAddr(varEntry, -1*stackOffset, 0);
         }
 
         funcParaNode = funcParaNode->rightSibling;
-        stackOffset -= -4;
+        stackOffset -= 4;
     }
 }
 
@@ -497,27 +498,95 @@ void genAssignmentStmt(FILE* targetFile, STT* symbolTable, AST_NODE* assignmentN
     ExpValPlace* lvaluePlace = &(lvalueNode->valPlace);
     if(lvalueType == INT_TYPE){
         /* lvalue = rvalue */
-        if(lvaluePlace->kind == STACK_TYPE)
+        if(lvaluePlace->kind == STACK_TYPE && lvaluePlace->arrIdxKind == STATIC_INDEX)
             fprintf(targetFile, "sw $%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
-        else if(lvaluePlace->kind == GLOBAL_TYPE)
+        else if(lvaluePlace->kind == STACK_TYPE && lvaluePlace->arrIdxKind == DYNAMIC_INDEX){
+            int tempRegNum = getExprNodeReg(targetFile, lvalueNode->child);
+            fprintf(targetFile, "add $%d, $%d, $fp\n", tempRegNum, tempRegNum);
+            fprintf(targetFile, "sw $%d, %d($%d)\n", rvalueRegNum, 
+              -1*lvaluePlace->place.stackOffset, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+        
+        }
+        else if(lvaluePlace->kind == GLOBAL_TYPE && lvaluePlace->arrIdxKind == STATIC_INDEX)
             fprintf(targetFile, "sw $%d, %s+%d\n", rvalueRegNum, 
               lvaluePlace->place.data.label, lvaluePlace->place.data.offset);
+        else if(lvaluePlace->kind == GLOBAL_TYPE && lvaluePlace->arrIdxKind == DYNAMIC_INDEX){
+            int tempRegNum = getExprNodeReg(targetFile, lvalueNode->child);
+            fprintf(targetFile, "addi $%d, $%d, %s\n", tempRegNum, tempRegNum,
+              lvalueNode->valPlace.place.data.label);
+            fprintf(targetFile, "sw $%d, 0($%d)\n", rvalueRegNum, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum); 
+        }
+        else if(lvaluePlace->kind == INDIRECT_ADDRESS && lvaluePlace->arrIdxKind == STATIC_INDEX){
+            int tempRegNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $%d, %d($fp)\n", tempRegNum, lvaluePlace->place.inAddr.offset1);
+            fprintf(targetFile, "sw $%d, %d($%d)\n", rvalueRegNum, 
+              lvaluePlace->place.inAddr.offset2, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+        }
+        else if(lvaluePlace->kind == INDIRECT_ADDRESS && lvaluePlace->arrIdxKind == DYNAMIC_INDEX){
+            int tempRegNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $%d, %d($fp)\n", tempRegNum, lvaluePlace->place.inAddr.offset1);
+
+            int tempRegNum2 = getExprNodeReg(targetFile, lvalueNode->child);
+            genAddOpInstr(targetFile, tempRegNum2, tempRegNum2, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+
+            fprintf(targetFile, "sw $%d, 0($%d)\n", rvalueRegNum, tempRegNum2);
+            releaseReg(GR.regManager, tempRegNum2);
+        }
         // no release, let ExprNode(=) use this register
         // releaseReg(GR.regManager, rvalueRegNum);
         /* return rvalue at ExprNode(=) */
         setPlaceOfASTNodeToReg(assignmentNode, INT_TYPE, rvalueRegNum);
+        useReg(GR.regManager, rvalueRegNum, assignmentNode);
     }
     if(lvalueType == FLOAT_TYPE){
         /* lvalue = rvalue */
-        if(lvaluePlace->kind == STACK_TYPE)
+        if(lvaluePlace->kind == STACK_TYPE && lvaluePlace->arrIdxKind == STATIC_INDEX)
             fprintf(targetFile, "s.s $f%d, %d($fp)\n", rvalueRegNum, -1*lvaluePlace->place.stackOffset);
-        else if(lvaluePlace->kind == GLOBAL_TYPE)
+        else if(lvaluePlace->kind == STACK_TYPE && lvaluePlace->arrIdxKind == DYNAMIC_INDEX){
+            int tempRegNum = getExprNodeReg(targetFile, lvalueNode->child);
+            fprintf(targetFile, "add $%d, $%d, $fp\n", tempRegNum, tempRegNum);
+            fprintf(targetFile, "s.s $f%d, %d($%d)\n", rvalueRegNum, 
+              -1*lvaluePlace->place.stackOffset, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+        
+        }
+        else if(lvaluePlace->kind == GLOBAL_TYPE && lvaluePlace->arrIdxKind == STATIC_INDEX)
             fprintf(targetFile, "s.s $f%d, %s+%d\n", rvalueRegNum,
               lvaluePlace->place.data.label, lvaluePlace->place.data.offset);
+        else if(lvaluePlace->kind == GLOBAL_TYPE && lvaluePlace->arrIdxKind == DYNAMIC_INDEX){
+            int tempRegNum = getExprNodeReg(targetFile, lvalueNode->child);
+            fprintf(targetFile, "addi $%d, $%d, %s\n", tempRegNum, tempRegNum, lvalueNode->valPlace.place.data.label);
+            fprintf(targetFile, "s.s $f%d, 0($%d)\n", rvalueRegNum, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum); 
+        }
+        else if(lvaluePlace->kind == INDIRECT_ADDRESS && lvaluePlace->arrIdxKind == STATIC_INDEX){
+            int tempRegNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $%d, %d($fp)\n", tempRegNum, lvaluePlace->place.inAddr.offset1);
+            fprintf(targetFile, "s.s $f%d, %d($%d)\n", rvalueRegNum, 
+              lvaluePlace->place.inAddr.offset2, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+        }
+        else if(lvaluePlace->kind == INDIRECT_ADDRESS && lvaluePlace->arrIdxKind == DYNAMIC_INDEX){
+            int tempRegNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "lw $%d, %d($fp)\n", tempRegNum, lvaluePlace->place.inAddr.offset1);
+
+            int tempRegNum2 = getExprNodeReg(targetFile, lvalueNode->child);
+            genAddOpInstr(targetFile, tempRegNum2, tempRegNum2, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+
+            fprintf(targetFile, "s.s $f%d, 0($%d)\n", rvalueRegNum, tempRegNum);
+            releaseReg(GR.regManager, tempRegNum);
+        }
+
         // no release, let ExprNode(=) use this register
         // releaseReg(GR.FPRegManager, rvalueRegNum);
         /* return rvalue at ExprNode(=) */
         setPlaceOfASTNodeToReg(assignmentNode, FLOAT_TYPE, rvalueRegNum);
+        useReg(GR.FPRegManager, rvalueRegNum, assignmentNode);
     }
 }
 
@@ -562,7 +631,7 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
         }
     }
     else if( exprNode->nodeType == IDENTIFIER_NODE ){
-        /* assign place to identifier place (LOCAL is stackOffset, GLOBAL is (label, offset))
+        /* assign lvalue(memory address) to identifier place (LOCAL is stackOffset, GLOBAL is (label, offset))
          * 1. find variable name
          * 2. find symbolTable entry
          * 3. compute array offset
@@ -574,31 +643,46 @@ void genExpr(FILE* targetFile, STT* symbolTable, AST_NODE* exprNode){
             scope = GLOBAL;
 
         DATA_TYPE type = entry->type->primitiveType;
-        int arrayOffset = computeArrayOffset(entry, exprNode);
+        int arrayOffset = 0;
+        ArrayIndexKind arrIdxKind = computeArrayOffset(targetFile, symbolTable, entry, exprNode, &arrayOffset);
 
         if(scope == LOCAL){
             if(entry->place.kind == INDIRECT_ADDRESS){
                 int stackOffset = entry->place.place.inAddr.offset1;
-                if(type == INT_TYPE)
-                    setPlaceOfASTNodeToIndirectAddr(exprNode, INT_TYPE, stackOffset, arrayOffset);
-                else if(type == FLOAT_TYPE)
-                    setPlaceOfASTNodeToIndirectAddr(exprNode, FLOAT_TYPE, stackOffset, arrayOffset);
+                if(type == INT_TYPE && arrIdxKind == STATIC_INDEX)
+                    setPlaceOfASTNodeToIndirectAddr(exprNode, INT_TYPE, stackOffset, arrayOffset, STATIC_INDEX);
+                else if(type == INT_TYPE && arrIdxKind == DYNAMIC_INDEX)
+                    setPlaceOfASTNodeToIndirectAddr(exprNode, INT_TYPE, stackOffset, 0, DYNAMIC_INDEX);
+                else if(type == FLOAT_TYPE && arrIdxKind == STATIC_INDEX)
+                    setPlaceOfASTNodeToIndirectAddr(exprNode, FLOAT_TYPE, stackOffset, arrayOffset, STATIC_INDEX);
+                else if(type == FLOAT_TYPE && arrIdxKind == DYNAMIC_INDEX)
+                    setPlaceOfASTNodeToIndirectAddr(exprNode, FLOAT_TYPE, stackOffset, 0, DYNAMIC_INDEX);
             
             }
             else{
+                /* STACK_TYPE */
                 int stackOffset = entry->place.place.stackOffset;
-                if(type == INT_TYPE)
-                    setPlaceOfASTNodeToStack(exprNode, INT_TYPE, stackOffset + arrayOffset);
-                else if(type == FLOAT_TYPE)
-                    setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, stackOffset + arrayOffset);
+                if(type == INT_TYPE && arrIdxKind == STATIC_INDEX)
+                    setPlaceOfASTNodeToStack(exprNode, INT_TYPE, stackOffset - arrayOffset, STATIC_INDEX);
+                else if(type == INT_TYPE && arrIdxKind == DYNAMIC_INDEX)
+                    setPlaceOfASTNodeToStack(exprNode, INT_TYPE, stackOffset, DYNAMIC_INDEX);
+                else if(type == FLOAT_TYPE && arrIdxKind == STATIC_INDEX)
+                    setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, stackOffset - arrayOffset, STATIC_INDEX);
+                else if(type == FLOAT_TYPE && arrIdxKind == DYNAMIC_INDEX)
+                    setPlaceOfASTNodeToStack(exprNode, FLOAT_TYPE, stackOffset, DYNAMIC_INDEX);
             }
         }
 
         if(scope == GLOBAL){
-            if(type == INT_TYPE)
-                setPlaceOfASTNodeToGlobalData(exprNode, INT_TYPE, entry->name, arrayOffset);
-            else if(type == FLOAT_TYPE)
-                setPlaceOfASTNodeToGlobalData(exprNode, FLOAT_TYPE, entry->name, arrayOffset);
+            /* GLOBAL_TYPE */
+            if(type == INT_TYPE && arrIdxKind == STATIC_INDEX)
+                setPlaceOfASTNodeToGlobalData(exprNode, INT_TYPE, entry->name, arrayOffset, STATIC_INDEX);
+            else if(type == INT_TYPE && arrIdxKind == DYNAMIC_INDEX)
+                setPlaceOfASTNodeToGlobalData(exprNode, INT_TYPE, entry->name, 0, DYNAMIC_INDEX);
+            else if(type == FLOAT_TYPE && arrIdxKind == STATIC_INDEX)
+                setPlaceOfASTNodeToGlobalData(exprNode, FLOAT_TYPE, entry->name, arrayOffset, STATIC_INDEX);
+            else if(type == FLOAT_TYPE && arrIdxKind == DYNAMIC_INDEX)
+                setPlaceOfASTNodeToGlobalData(exprNode, FLOAT_TYPE, entry->name, 0, DYNAMIC_INDEX);
         }
     }
     else if( exprNode->nodeType == EXPR_NODE ){
@@ -869,8 +953,8 @@ void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode,
         /* It is an array
            GLOBAL -> get offset(name)
            LOCAL  -> may access non-local array
-                     non-local array address relatives to non-local fp
-           HAVE NOT IMPLEMENTED */
+                     non-local array address relatives to non-local fp 
+         */
 
         char* varName = paraNode->semantic_value.identifierSemanticValue.identifierName;
         int level, scope = LOCAL;
@@ -880,27 +964,58 @@ void _genParaList(FILE* targetFile, STT* symbolTable, AST_NODE* paraNode,
         
         /* passing array address in array parameter */
         int regNum = getReg(GR.regManager, targetFile);
-        int arrayOffset = computeArrayOffset(entry, paraNode);
+        int arrayOffset = 0;
+        ArrayIndexKind arrIdxKind = computeArrayOffset(targetFile, symbolTable, entry, paraNode, &arrayOffset);
 
         if(scope == GLOBAL){
             /* pass global array address in stack(for indirect address) */
-            fprintf(targetFile, "li $%d, %s+%d", regNum, varName, arrayOffset);
-            fprintf(targetFile, "sw $%d, 0($sp)", regNum);
+            if(arrIdxKind == STATIC_INDEX){
+                /* varName + arrayOffset */
+                fprintf(targetFile, "li $%d, %s+%d\n", regNum, varName, arrayOffset);
+                fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+            }
+            else if(arrIdxKind == DYNAMIC_INDEX){
+                /* varName + dynamic arrayOffset */
+                int offsetRegNum = getExprNodeReg(targetFile, paraNode->child);
+                fprintf(targetFile, "addi $%d, $%d, %s\n", regNum, offsetRegNum, varName);
+                fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+                releaseReg(GR.regManager, offsetRegNum);
+            }
         }
         else if(scope == LOCAL){
             if(entry->place.kind == STACK_TYPE){
                 /* pass local array address in stack(for indirect address) */
-                int stackOffset = entry->place.place.stackOffset;
-                fprintf(targetFile, "addi $%d, $fp, %d", regNum, stackOffset);
-                fprintf(targetFile, "addi $%d, $%d, %d", regNum, regNum, arrayOffset);
-                fprintf(targetFile, "sw $%d, 0($sp)", regNum);
+                if(arrIdxKind == STATIC_INDEX){
+                    int stackOffset = entry->place.place.stackOffset;
+                    fprintf(targetFile, "addi $%d, $fp, %d\n", regNum, -1*stackOffset);
+                    fprintf(targetFile, "addi $%d, $%d, %d\n", regNum, regNum, arrayOffset);
+                    fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+                }
+                else if(arrIdxKind == DYNAMIC_INDEX){
+                    int stackOffset = entry->place.place.stackOffset;
+                    fprintf(targetFile, "addi $%d, $fp, %d\n", regNum, -1*stackOffset);
+                    int offsetRegNum = getExprNodeReg(targetFile, paraNode->child);
+                    fprintf(targetFile, "add $%d, $%d, $%d\n", regNum, regNum, offsetRegNum);
+                    fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+                    releaseReg(GR.regManager, offsetRegNum);
+                }
             }
             else if(entry->place.kind == INDIRECT_ADDRESS){
                 /* pass indirect address array address in stack(for indirect address) */
-                int stackOffset = entry->place.place.inAddr.offset1;
-                fprintf(targetFile, "lw $%d, %d($fp)", regNum, stackOffset);
-                fprintf(targetFile, "addi $%d, $%d, %d", regNum, regNum, arrayOffset);
-                fprintf(targetFile, "sw $%d, 0($sp)", regNum);
+                if(arrIdxKind == STATIC_INDEX){
+                    int stackOffset = entry->place.place.inAddr.offset1;
+                    fprintf(targetFile, "lw $%d, %d($fp)\n", regNum, -1*stackOffset);
+                    fprintf(targetFile, "addi $%d, $%d, %d\n", regNum, regNum, arrayOffset);
+                    fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+                }
+                else if(arrIdxKind == DYNAMIC_INDEX){
+                    int stackOffset = entry->place.place.inAddr.offset1;
+                    fprintf(targetFile, "lw $%d, %d($fp)\n", regNum, -1*stackOffset);
+                    int offsetRegNum = getExprNodeReg(targetFile, paraNode->child);
+                    fprintf(targetFile, "add $%d, $%d, $%d\n", regNum, regNum, offsetRegNum);
+                    fprintf(targetFile, "sw $%d, 0($sp)\n", regNum);
+                    releaseReg(GR.regManager, offsetRegNum);
+                }
             }
          
         }
@@ -981,14 +1096,32 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
         int stackOffset = exprNode->valPlace.place.stackOffset;
         if(exprNode->valPlace.dataType == INT_TYPE){
             int regNum = getReg(GR.regManager, targetFile);
-            fprintf(targetFile, "lw $%d, %d($fp)\n", regNum, -1*stackOffset);
+
+            if(exprNode->valPlace.arrIdxKind == STATIC_INDEX)
+                fprintf(targetFile, "lw $%d, %d($fp)\n", regNum, -1*stackOffset);
+            else if(exprNode->valPlace.arrIdxKind == DYNAMIC_INDEX){
+                int dyIndexRegNum = getExprNodeReg(targetFile, exprNode->child);
+                fprintf(targetFile, "add $%d, $%d, $fp\n", dyIndexRegNum, dyIndexRegNum);
+                fprintf(targetFile, "lw $%d, %d($%d)\n", regNum, -1*stackOffset, dyIndexRegNum);
+                releaseReg(GR.regManager, dyIndexRegNum);
+            }
+
             useReg(GR.regManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
             return regNum;
         }
         else if(exprNode->valPlace.dataType == FLOAT_TYPE){
             int regNum = getReg(GR.FPRegManager, targetFile);
-            fprintf(targetFile, "l.s $f%d, %d($fp)\n", regNum, -1*stackOffset);
+
+            if(exprNode->valPlace.arrIdxKind == STATIC_INDEX)
+                fprintf(targetFile, "l.s $f%d, %d($fp)\n", regNum, -1*stackOffset);
+            else if(exprNode->valPlace.arrIdxKind == DYNAMIC_INDEX){
+                int dyIndexRegNum = getExprNodeReg(targetFile, exprNode->child);
+                fprintf(targetFile, "add $%d, $%d, $fp\n", dyIndexRegNum, dyIndexRegNum);
+                fprintf(targetFile, "l.s $f%d, %d($%d)\n", regNum, -1*stackOffset, dyIndexRegNum);
+                releaseReg(GR.regManager, dyIndexRegNum);
+            }
+
             useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
@@ -998,14 +1131,32 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
         ExpValPlace* place = &(exprNode->valPlace);
         if(place->dataType == INT_TYPE){
             int regNum = getReg(GR.regManager, targetFile);
-            fprintf(targetFile, "lw $%d, %s+%d\n", regNum, place->place.data.label, place->place.data.offset);
+
+            if(exprNode->valPlace.arrIdxKind == STATIC_INDEX)
+                fprintf(targetFile, "lw $%d, %s+%d\n", regNum, place->place.data.label, place->place.data.offset);
+            else if(exprNode->valPlace.arrIdxKind == DYNAMIC_INDEX){
+                int dyIndexRegNum = getExprNodeReg(targetFile, exprNode->child); 
+                fprintf(targetFile, "addi $%d, $%d, %s\n", dyIndexRegNum, dyIndexRegNum, place->place.data.label);
+                fprintf(targetFile, "lw $%d, 0($%d)\n", regNum, dyIndexRegNum);
+                releaseReg(GR.regManager, dyIndexRegNum);
+            }
+
             useReg(GR.regManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
             return regNum;
         }
         else if(place->dataType == FLOAT_TYPE){
             int regNum = getReg(GR.FPRegManager, targetFile);
-            fprintf(targetFile, "l.s $f%d, %s+%d\n", regNum, place->place.data.label, place->place.data.offset);
+
+            if(exprNode->valPlace.arrIdxKind == STATIC_INDEX)
+                fprintf(targetFile, "l.s $f%d, %s+%d\n", regNum, place->place.data.label, place->place.data.offset);
+            else if(exprNode->valPlace.arrIdxKind == DYNAMIC_INDEX){
+                int dyIndexRegNum = getExprNodeReg(targetFile, exprNode->child); 
+                fprintf(targetFile, "addi $%d, $%d, %s\n", dyIndexRegNum, dyIndexRegNum, place->place.data.label);
+                fprintf(targetFile, "l.s $f%d, 0($%d)\n", regNum, dyIndexRegNum);
+                releaseReg(GR.regManager, dyIndexRegNum);
+            }
+
             useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
             return regNum;
@@ -1015,18 +1166,32 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
         int offset1 = exprNode->valPlace.place.inAddr.offset1;
         int offset2 = exprNode->valPlace.place.inAddr.offset2;
         int tempRegNum = getReg(GR.regManager, targetFile);
-        fprintf(targetFile, "lw, $%d, %d($fp)\n", tempRegNum, -1*offset1);
+        fprintf(targetFile, "lw $%d, %d($fp)\n", tempRegNum, offset1);
 
         int regNum = 0;
         if(exprNode->valPlace.dataType == INT_TYPE){
             regNum = getReg(GR.regManager, targetFile);
-            fprintf(targetFile, "lw $%d, %d($%d)\n", regNum, offset2, tempRegNum);
+            if(exprNode->valPlace.arrIdxKind == STATIC_INDEX)
+                fprintf(targetFile, "lw $%d, %d($%d)\n", regNum, offset2, tempRegNum);
+            else if(exprNode->valPlace.arrIdxKind == DYNAMIC_INDEX){
+                int dyIndexRegNum = getExprNodeReg(targetFile, exprNode->child); 
+                genAddOpInstr(targetFile, tempRegNum, tempRegNum, dyIndexRegNum);
+                releaseReg(GR.regManager, dyIndexRegNum);
+                fprintf(targetFile, "lw $%d, 0($%d)\n", regNum, tempRegNum);
+            }
             useReg(GR.regManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, INT_TYPE, regNum);
         }
         else if(exprNode->valPlace.dataType == FLOAT_TYPE){
             regNum = getReg(GR.FPRegManager, targetFile);
-            fprintf(targetFile, "l.s $f%d, %d($%d)\n", regNum, offset2, tempRegNum);
+            if(exprNode->valPlace.arrIdxKind == STATIC_INDEX)
+                fprintf(targetFile, "l.s $f%d, %d($%d)\n", regNum, offset2, tempRegNum);
+            else if(exprNode->valPlace.arrIdxKind == DYNAMIC_INDEX){
+                int dyIndexRegNum = getExprNodeReg(targetFile, exprNode->child); 
+                genAddOpInstr(targetFile, tempRegNum, tempRegNum, dyIndexRegNum);
+                releaseReg(GR.regManager, dyIndexRegNum);
+                fprintf(targetFile, "l.s $f%d, 0($%d)\n", regNum, tempRegNum);
+            }
             useReg(GR.FPRegManager, regNum, exprNode);
             setPlaceOfASTNodeToReg(exprNode, FLOAT_TYPE, regNum);
         }
@@ -1039,7 +1204,8 @@ int getExprNodeReg(FILE* targetFile, AST_NODE* exprNode){
     return -1;
 }
 
-int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode){
+ArrayIndexKind computeArrayOffset(FILE* targetFile, STT* symbolTable, SymbolTableEntry* symbolEntry, 
+  AST_NODE* usedNode, int* staticOffset){
     /* compute used Node's array offset, use symbol table type
      * example, a[5] for int a[10], offset = 5*sizeof(int) = 20
      * example, a[5][6] for int a[10][10], offset = (50+6)*sizeof(int) = 224
@@ -1060,14 +1226,74 @@ int computeArrayOffset(SymbolTableEntry* symbolEntry, AST_NODE* usedNode){
     dimension = symbolEntry->type->dimension;
     int i;
     AST_NODE* dimenChild = usedNode->child;
-    for(i = 0; i < dimension; i++){
-        /* array */
-        arrayOffset += dimenChild->semantic_value.const1->const_u.intval * offsetOfEachDimension[i];
+    AST_NODE* FirstChild = usedNode->child;
 
-        dimenChild = dimenChild->rightSibling;
+    if(isAllConstIndex(dimenChild)){
+        for(i = 0; i < dimension; i++){
+            if(!dimenChild)
+                /* return array address, not scalar value */
+                break;
+
+            /* array */
+            arrayOffset += dimenChild->semantic_value.const1->const_u.intval * offsetOfEachDimension[i];
+
+            dimenChild = dimenChild->rightSibling;
+        }
+        *staticOffset = arrayOffset;
+        return STATIC_INDEX;
     }
+    else{
+        /* dynamic array index, store in register attach on array first child(index)'s place. */ 
+        int regNum = 0; 
+        for(i = 0; i < dimension; i++){
+        // regNum(arrayOffset) = sum( value of dimenChild * offsetOfEachDimension[i] for i in (0, dimension));
 
-    return arrayOffset;
+            if(!dimenChild)
+                /* return array address, not scalar value */
+                break;
+
+            // regNum(arrayOffset) += value of dimenChild * offsetOfEachDimension[i];
+            genExpr(targetFile, symbolTable, dimenChild);
+
+            // constRegNum = offsetOfEachDimension[i]
+            int constRegNum = getReg(GR.regManager, targetFile);
+            fprintf(targetFile, "li $%d, %d\n", constRegNum, offsetOfEachDimension[i]);
+
+            // childRegNum = value of dimenChild * constRegNum
+            int childRegNum = getExprNodeReg(targetFile, dimenChild);
+            genMulOpInstr(targetFile, childRegNum, childRegNum, constRegNum);
+            releaseReg(GR.regManager, constRegNum);
+
+            // regNum += childRegNum
+            if(i == 0){
+                regNum = getReg(GR.regManager, targetFile);
+                fprintf(targetFile, "li $%d, 0\n", regNum);
+            }
+            else
+                regNum = getExprNodeReg(targetFile, FirstChild);
+            genAddOpInstr(targetFile, regNum, regNum, childRegNum);
+            releaseReg(GR.regManager, childRegNum);
+
+            // FirstChild use regNum;
+            useReg(GR.regManager, regNum, FirstChild);
+            setPlaceOfASTNodeToReg(FirstChild, INT_TYPE, regNum);
+
+            dimenChild = dimenChild->rightSibling;
+        }
+
+        return DYNAMIC_INDEX;
+    }
+}
+
+int isAllConstIndex(AST_NODE* headNode){
+    if(!headNode)
+        return 1;
+
+    if(isAllConstIndex(headNode->rightSibling)){
+        if(headNode->nodeType == CONST_VALUE_NODE)
+            return 1;
+    }
+    return 0;
 }
 
 /*** Data Resourse, RegisterManager Implementation ***/
@@ -1459,12 +1685,14 @@ void genWrite(FILE *targetFile, STT* symbolTable, AST_NODE* funcCallNode){
             fprintf(targetFile, "li $v0, 1\n");
             fprintf(targetFile, "move $a0, $%d\n", intRegNum);
             fprintf(targetFile, "syscall\n");
+            releaseReg(GR.regManager, intRegNum);
         }
         else if(dataType == FLOAT_TYPE){
             int floatRegNum = getExprNodeReg(targetFile, ExprNode);
             fprintf(targetFile, "li $v0, 2\n");
             fprintf(targetFile, "mov.s $f12, $f%d\n", floatRegNum);
             fprintf(targetFile, "syscall\n");
+            releaseReg(GR.FPRegManager, floatRegNum);
         }
     }
 
