@@ -51,14 +51,15 @@ void processVariableDeclList(STT* symbolTable, AST_NODE* variableDeclListNode);
 void processVariableDecl(STT* symbolTable, AST_NODE* declarationNode);
 void processFunctionDecl(STT* symbolTable, AST_NODE* declarationNode);
     /* usage inner functions */
-DATA_TYPE typeNameToType(STT* symbolTable, char* typeName, int allowTypeDef);
-void declareTypeID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiveType);
-void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiveType);
+TypeDescriptor* typeNameToType(STT* symbolTable, char* typeName, int allowTypeDef);
+void declareTypeID(STT* symbolTable, AST_NODE* idNode, TypeDescriptor* definedType);
+void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, TypeDescriptor* definedType);
 int isDeclaredCurScope(STT* symbolTable, char* name);
 TypeDescriptor* idNodeToTypeDescriptor(AST_NODE* idNode, DECL_KIND declKind, DATA_TYPE primitiveType);
 int idNodeIsArray(AST_NODE* idNode, DECL_KIND declKind);
 int constExprEvaluation(AST_NODE* cexprNode, int* isError);
 
+void typeAddNewDimension(TypeDescriptor* origType, AST_NODE* arrayIdNode);
 int countRightSibling(AST_NODE* ASTNode);
 ParameterNode* GenParameterNodeList(STT* symbolTable, AST_NODE* paraListNode);
 
@@ -109,26 +110,29 @@ void processVariableDecl(STT* symbolTable, AST_NODE* declarationNode){
     AST_NODE* typeNode = declarationNode->child;
     char* primitiveTypeName = typeNode->semantic_value.identifierSemanticValue.identifierName;
     if(declKind == TYPE_DECL){
-        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
-        if(primitiveType == NONE_TYPE)
+        TypeDescriptor* definedType = typeNameToType(symbolTable, primitiveTypeName, 0);
+        // DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 0);
+        if(definedType->primitiveType == NONE_TYPE)
             return; /* grammar error */
+        // if(primitiveType == NONE_TYPE)
+        //    return; /* grammar error */
         
         AST_NODE* idNode = typeNode->rightSibling;
         while(idNode){
-            declareTypeID(symbolTable, idNode, primitiveType);
+            declareTypeID(symbolTable, idNode, definedType);
             idNode = idNode->rightSibling;
         }
     }
     else if(declKind == VARIABLE_DECL || declKind == FUNCTION_PARAMETER_DECL){
-        DATA_TYPE primitiveType = typeNameToType(symbolTable, primitiveTypeName, 1);
-        if(primitiveType == NONE_TYPE){
+        TypeDescriptor* definedType = typeNameToType(symbolTable, primitiveTypeName, 1);
+        if(definedType->primitiveType == NONE_TYPE){
             printErrorMissingDecl(typeNode, primitiveTypeName);
             return;
         }
 
         AST_NODE* idNode = typeNode->rightSibling;
         while(idNode){
-            declareScalarArrayID(symbolTable, idNode, primitiveType);
+            declareScalarArrayID(symbolTable, idNode, definedType);
             idNode = idNode->rightSibling;
         }
     }
@@ -148,7 +152,8 @@ void processFunctionDecl(STT* symbolTable, AST_NODE* funcDeclarationNode){
     }
     
     char* returnTypeName = returnTypeNode->semantic_value.identifierSemanticValue.identifierName;
-    DATA_TYPE returnType = typeNameToType(symbolTable, returnTypeName, 1);
+    TypeDescriptor* tmpDescriptor = typeNameToType(symbolTable, returnTypeName, 1);
+    DATA_TYPE returnType = tmpDescriptor->primitiveType;
     TypeDescriptor* returnTypeDescriptor = NULL;
     if(returnType == NONE_TYPE){
         printErrorMissingDecl(returnTypeNode, returnTypeName);
@@ -284,7 +289,8 @@ int isDeclaredCurScope(STT* symbolTable, char* name){
     return 0;
 }
 
-void declareTypeID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiveType){
+
+void declareTypeID(STT* symbolTable, AST_NODE* idNode, TypeDescriptor* definedType){
     /* Declare typedef idNode and check redeclaration.
      * If redeclaration, the latter declaration will be ignored.
      */
@@ -295,13 +301,15 @@ void declareTypeID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiveType){
     }
     
     SymbolTableEntryKind kind = TYPE_ENTRY;
-    TypeDescriptor* type = idNodeToTypeDescriptor(idNode, TYPE_DECL, primitiveType);
+    // TypeDescriptor* type = idNodeToTypeDescriptor(idNode, TYPE_DECL, primitiveType);
+    TypeDescriptor* type = copyTypeDescriptor(definedType);
+    typeAddNewDimension(type, idNode);
 
     SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, 0, NULL);
     addSymbolByEntry(symbolTable, entry);
 }
 
-void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiveType){
+void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, TypeDescriptor* definedType){
     /* Declare Scalar or Array idNode and check redeclaration.
      * If redeclaration, the latter declaration will be ignored.
      */
@@ -311,39 +319,81 @@ void declareScalarArrayID(STT* symbolTable, AST_NODE* idNode, DATA_TYPE primitiv
         return;
     }
 
-    SymbolTableEntryKind kind;
+    SymbolTableEntryKind kind = VAR_ENTRY;
     if(idNodeIsArray(idNode, VARIABLE_DECL))
         kind = ARRAY_ENTRY;
-    else
-        kind = VAR_ENTRY;
+    if(definedType->dimension > 0)
+        kind = ARRAY_ENTRY;
 
-    TypeDescriptor* type = idNodeToTypeDescriptor(idNode, VARIABLE_DECL, primitiveType);
+    // TypeDescriptor* type = idNodeToTypeDescriptor(idNode, VARIABLE_DECL, primitiveType);
+    TypeDescriptor* type = copyTypeDescriptor(definedType);
+    typeAddNewDimension(type, idNode);
 
     SymbolTableEntry* entry = createSymbolTableEntry(name, kind, type, 0, NULL);
     addSymbolByEntry(symbolTable, entry);
     idNode = idNode->rightSibling;
 }
 
-DATA_TYPE typeNameToType(STT* symbolTable, char* typeName, int allowTypeDef){
-    /* check type name exist(ex. "int" ), and transform to DATA_TYPE enum type 
-     * return NONE_TYPE means typeName doesn't exist
+TypeDescriptor* typeNameToType(STT* symbolTable, char* typeName, int allowTypeDef){
+    /* check type name exist(ex. "int" ), and transform to TypeDescriptor* type 
+     * return noneType means typeName doesn't exist
      */
+    static TypeDescriptor intType;
+    static TypeDescriptor floatType;
+    static TypeDescriptor voidType;
+    static TypeDescriptor noneType;
+    intType.primitiveType = INT_TYPE;
+    intType.dimension = 0;
+    floatType.primitiveType = FLOAT_TYPE;
+    floatType.dimension = 0;
+    voidType.primitiveType = VOID_TYPE;
+    voidType.dimension = 0;
+    noneType.primitiveType = NONE_TYPE;
+    noneType.dimension = 0;
+
     int len = strlen(typeName);
     if(len == 3 && strncmp(typeName, "int", 3) == 0)
-        return INT_TYPE;
+        return &intType;
     if(len == 5 && strncmp(typeName, "float", 5) == 0)
-        return FLOAT_TYPE;
+        return &floatType;
     if(len == 4 && strncmp(typeName, "void", 4) == 0)
-        return VOID_TYPE;
+        return &voidType;
     if(!allowTypeDef)
-        return NONE_TYPE;
+        return &noneType;
 
     SymbolTableEntry* entry = lookupSymbol(symbolTable, typeName);
     if(!entry) 
-        return NONE_TYPE;
+        return &noneType;
     if(entry->kind != TYPE_ENTRY) 
-        return NONE_TYPE; /* UNFINISH: */
-    return entry->type->primitiveType;
+        return &noneType; /* UNFINISH: */
+    return entry->type;
+}
+
+void typeAddNewDimension(TypeDescriptor* origType, AST_NODE* arrayIdNode){
+    if(arrayIdNode->semantic_value.identifierSemanticValue.kind == ARRAY_ID){
+        AST_NODE* child = arrayIdNode->child; 
+        int newDimen = 0;
+        int sizeOfEachDimension[MAX_ARRAY_DIMENSION] = {0};
+
+        while(child){
+            if(child->nodeType == CONST_VALUE_NODE)
+                sizeOfEachDimension[newDimen] = child->semantic_value.const1->const_u.intval;
+            else
+                sizeOfEachDimension[newDimen] = 0;
+            newDimen += 1;
+            child = child->rightSibling;
+        }
+        int i;
+        for(i = 0; i < origType->dimension; i++){
+            sizeOfEachDimension[newDimen] = origType->sizeOfEachDimension[i];
+            newDimen += 1;
+        }
+
+        origType->dimension = newDimen;
+        for(i = 0; i < newDimen; i++){
+            origType->sizeOfEachDimension[i] = sizeOfEachDimension[i];
+        }
+    }
 }
 
 int countRightSibling(AST_NODE* ASTNode){
@@ -370,8 +420,10 @@ ParameterNode* GenParameterNodeList(STT* symbolTable, AST_NODE* paraListNode){
         for(i=0; i<paraNum; i++){
             AST_NODE* typeNode = funcParaNode->child;
             char* typeName = typeNode->semantic_value.identifierSemanticValue.identifierName;
-            DATA_TYPE primitiveType = typeNameToType(symbolTable, typeName, 1);
-            typeOfParas[i] = idNodeToTypeDescriptor(typeNode->rightSibling, VARIABLE_DECL, primitiveType);
+            TypeDescriptor* definedType = typeNameToType(symbolTable, typeName, 1);
+            // typeOfParas[i] = idNodeToTypeDescriptor(typeNode->rightSibling, VARIABLE_DECL, primitiveType);
+            typeOfParas[i] = copyTypeDescriptor(definedType);
+            typeAddNewDimension(typeOfParas[i], typeNode->rightSibling);
 
             AST_NODE* paraIdNode = typeNode->rightSibling;
             nameOfParas[i] = paraIdNode->semantic_value.identifierSemanticValue.identifierName;
